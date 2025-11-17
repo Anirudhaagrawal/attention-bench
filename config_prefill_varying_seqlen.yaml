@@ -1,0 +1,123 @@
+# FlashInfer Prefill-Only Benchmark: Varying Sequence Length
+# Tests: Pure prefill workloads with fixed batch size (32), varying sequence lengths
+# ====================================================================================
+
+# Model Configuration (aligned with Llama 3-8B)
+model:
+  num_qo_heads: 32  # Llama 3-8B
+  num_kv_heads: 8   # Llama 3-8B (GQA 4:1 ratio)
+  head_dim: 128     # Llama 3-8B
+  page_size: 256
+  workspace_size: 536870912  # 512 MB
+
+# Profiling Configuration
+profiling:
+  num_warmup_iters: 5
+  num_active_iters: 50
+
+# Output Configuration
+output:
+  results_dir: "results"
+  plots_dir: "plots"
+
+
+# Approaches to benchmark
+approaches:
+  - flashinfer_mixed_fa2
+  - flashinfer_mixed_fa3
+  # - flashinfer_mixed_cudnn
+  - flashinfer_separated_fa2
+  - flashinfer_separated_fa3
+  - official_fa3
+
+# Variants - Different sequence lengths (up to 12K to avoid memory issues)
+variants:
+  prefill_q512_kv512:
+    q_tokens: 512
+    kv_tokens: 512
+    description: "Prefill (512 tokens)"
+
+  prefill_q1k_kv1k:
+    q_tokens: 1024
+    kv_tokens: 1024
+    description: "Prefill (1K tokens)"
+
+  prefill_q2k_kv2k:
+    q_tokens: 2048
+    kv_tokens: 2048
+    description: "Prefill (2K tokens)"
+
+  prefill_q4k_kv4k:
+    q_tokens: 4096
+    kv_tokens: 4096
+    description: "Prefill (4K tokens)"
+
+  prefill_q6k_kv6k:
+    q_tokens: 6144
+    kv_tokens: 6144
+    description: "Prefill (6K tokens)"
+
+  prefill_q8k_kv8k:
+    q_tokens: 8192
+    kv_tokens: 8192
+    description: "Prefill (8K tokens)"
+
+  prefill_q10k_kv10k:
+    q_tokens: 10240
+    kv_tokens: 10240
+    description: "Prefill (10K tokens)"
+
+  prefill_q12k_kv12k:
+    q_tokens: 12288
+    kv_tokens: 12288
+    description: "Prefill (12K tokens)"
+
+# Test Scenarios - Fixed batch size (32) with varying sequence lengths
+scenarios:
+  prefill_32_seq512:
+    name: "32 Prefills (512 seq)"
+    description: "Batch 32 with 512 token sequences"
+    variants_to_run:
+      - prefill_q512_kv512: 32
+
+  prefill_32_seq1k:
+    name: "32 Prefills (1K seq)"
+    description: "Batch 32 with 1K token sequences"
+    variants_to_run:
+      - prefill_q1k_kv1k: 32
+
+  prefill_32_seq2k:
+    name: "32 Prefills (2K seq)"
+    description: "Batch 32 with 2K token sequences"
+    variants_to_run:
+      - prefill_q2k_kv2k: 32
+
+  prefill_32_seq4k:
+    name: "32 Prefills (4K seq)"
+    description: "Batch 32 with 4K token sequences"
+    variants_to_run:
+      - prefill_q4k_kv4k: 32
+
+  prefill_32_seq6k:
+    name: "32 Prefills (6K seq)"
+    description: "Batch 32 with 6K token sequences"
+    variants_to_run:
+      - prefill_q6k_kv6k: 32
+
+  prefill_32_seq8k:
+    name: "32 Prefills (8K seq)"
+    description: "Batch 32 with 8K token sequences"
+    variants_to_run:
+      - prefill_q8k_kv8k: 32
+
+  prefill_32_seq10k:
+    name: "32 Prefills (10K seq)"
+    description: "Batch 32 with 10K token sequences"
+    variants_to_run:
+      - prefill_q10k_kv10k: 32
+
+  prefill_32_seq12k:
+    name: "32 Prefills (12K seq)"
+    description: "Batch 32 with 12K token sequences"
+    variants_to_run:
+      - prefill_q12k_kv12k: 32

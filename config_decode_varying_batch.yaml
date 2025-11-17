@@ -1,0 +1,98 @@
+# FlashInfer Decode-Only Benchmark: Varying Batch Size
+# Tests: Pure decode workloads with varying batch sizes, fixed 2K KV cache
+# ==========================================================================
+
+# Model Configuration (aligned with Llama 3-8B)
+model:
+  num_qo_heads: 32  # Llama 3-8B
+  num_kv_heads: 8   # Llama 3-8B (GQA 4:1 ratio)
+  head_dim: 128     # Llama 3-8B
+  page_size: 256    # Default 256 for fair comparison with Official FA3
+  workspace_size: 536870912  # 512 MB
+
+# Profiling Configuration
+profiling:
+  num_warmup_iters: 5
+  num_active_iters: 50
+
+# Output Configuration
+output:
+  results_dir: "results"
+  plots_dir: "plots"
+
+# Approaches to benchmark (can be overridden with --approaches flag)
+approaches:
+  - flashinfer_mixed_fa2
+  - flashinfer_mixed_fa3
+  - flashinfer_separated_fa2
+  - flashinfer_separated_fa3
+  - official_fa3
+  # - flashinfer_mixed_cudnn
+
+# Optional: Override page_size for specific approaches
+# approach_overrides:
+#   flashinfer_mixed_fa2:
+#     page_size: 256
+
+# Variants
+variants:
+  decode_q1_kv2k:
+    q_tokens: 1
+    kv_tokens: 2048
+    description: "Decode (1 q, 2K kv)"
+
+# Test Scenarios - Varying batch size from 1 to 256
+scenarios:
+  decode_batch_1:
+    name: "Batch 1 (2K KV)"
+    description: "1 decode request"
+    variants_to_run:
+      - decode_q1_kv2k: 1
+
+  decode_batch_2:
+    name: "Batch 2 (2K KV)"
+    description: "2 decode requests"
+    variants_to_run:
+      - decode_q1_kv2k: 2
+
+  decode_batch_4:
+    name: "Batch 4 (2K KV)"
+    description: "4 decode requests"
+    variants_to_run:
+      - decode_q1_kv2k: 4
+
+  decode_batch_8:
+    name: "Batch 8 (2K KV)"
+    description: "8 decode requests"
+    variants_to_run:
+      - decode_q1_kv2k: 8
+
+  decode_batch_16:
+    name: "Batch 16 (2K KV)"
+    description: "16 decode requests"
+    variants_to_run:
+      - decode_q1_kv2k: 16
+
+  decode_batch_32:
+    name: "Batch 32 (2K KV)"
+    description: "32 decode requests"
+    variants_to_run:
+      - decode_q1_kv2k: 32
+
+  decode_batch_64:
+    name: "Batch 64 (2K KV)"
+    description: "64 decode requests"
+    variants_to_run:
+      - decode_q1_kv2k: 64
+
+  decode_batch_128:
+    name: "Batch 128 (2K KV)"
+    description: "128 decode requests"
+    variants_to_run:
+      - decode_q1_kv2k: 128
+
+  decode_batch_256:
+    name: "Batch 256 (2K KV)"
+    description: "256 decode requests"
+    variants_to_run:
+      - decode_q1_kv2k: 256

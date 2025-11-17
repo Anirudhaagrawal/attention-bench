@@ -1,0 +1,5 @@
+.claude*
+archived/
+plots/
+results/
+__pycache__/

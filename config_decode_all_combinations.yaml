@@ -1,0 +1,361 @@
+# FlashInfer Decode Comprehensive Benchmark: All Combinations
+# Tests: All combinations of batch sizes {1,2,4,8,16,32,64,128} x KV cache {1k,2k,4k,8k,16k,32k}
+# ==========================================================================
+
+# Model Configuration (aligned with Llama 3-8B)
+model:
+  num_qo_heads: 32 # Llama 3-8B
+  num_kv_heads: 8 # Llama 3-8B (GQA 4:1 ratio)
+  head_dim: 128 # Llama 3-8B
+  page_size: 256
+  workspace_size: 536870912 # 512 MB
+
+# Profiling Configuration
+profiling:
+  num_warmup_iters: 5
+  num_active_iters: 50
+
+# Output Configuration
+output:
+  results_dir: "results"
+  plots_dir: "plots"
+
+
+# Approaches to benchmark
+approaches:
+  - flashinfer_mixed_fa2
+  - flashinfer_mixed_fa3
+  # - flashinfer_mixed_cudnn
+  - flashinfer_separated_fa2
+  - flashinfer_separated_fa3
+  - official_fa3
+
+# Variants - All KV cache lengths
+variants:
+  decode_q1_kv1k:
+    q_tokens: 1
+    kv_tokens: 1024
+    description: "Decode (1 q, 1K kv)"
+
+  decode_q1_kv2k:
+    q_tokens: 1
+    kv_tokens: 2048
+    description: "Decode (1 q, 2K kv)"
+
+  decode_q1_kv4k:
+    q_tokens: 1
+    kv_tokens: 4096
+    description: "Decode (1 q, 4K kv)"
+
+  decode_q1_kv8k:
+    q_tokens: 1
+    kv_tokens: 8192
+    description: "Decode (1 q, 8K kv)"
+
+  decode_q1_kv16k:
+    q_tokens: 1
+    kv_tokens: 16384
+    description: "Decode (1 q, 16K kv)"
+
+  decode_q1_kv32k:
+    q_tokens: 1
+    kv_tokens: 32768
+    description: "Decode (1 q, 32K kv)"
+
+# Test Scenarios - All combinations (48 total: 8 batch sizes x 6 KV lengths)
+scenarios:
+  # Batch 1
+  decode_b1_kv1k:
+    name: "Decode B1 KV1K"
+    description: "Batch 1, 1K KV cache"
+    variants_to_run:
+      - decode_q1_kv1k: 1
+
+  decode_b1_kv2k:
+    name: "Decode B1 KV2K"
+    description: "Batch 1, 2K KV cache"
+    variants_to_run:
+      - decode_q1_kv2k: 1
+
+  decode_b1_kv4k:
+    name: "Decode B1 KV4K"
+    description: "Batch 1, 4K KV cache"
+    variants_to_run:
+      - decode_q1_kv4k: 1
+
+  decode_b1_kv8k:
+    name: "Decode B1 KV8K"
+    description: "Batch 1, 8K KV cache"
+    variants_to_run:
+      - decode_q1_kv8k: 1
+
+  decode_b1_kv16k:
+    name: "Decode B1 KV16K"
+    description: "Batch 1, 16K KV cache"
+    variants_to_run:
+      - decode_q1_kv16k: 1
+
+  decode_b1_kv32k:
+    name: "Decode B1 KV32K"
+    description: "Batch 1, 32K KV cache"
+    variants_to_run:
+      - decode_q1_kv32k: 1
+
+  # Batch 2
+  decode_b2_kv1k:
+    name: "Decode B2 KV1K"
+    description: "Batch 2, 1K KV cache"
+    variants_to_run:
+      - decode_q1_kv1k: 2
+
+  decode_b2_kv2k:
+    name: "Decode B2 KV2K"
+    description: "Batch 2, 2K KV cache"
+    variants_to_run:
+      - decode_q1_kv2k: 2
+
+  decode_b2_kv4k:
+    name: "Decode B2 KV4K"
+    description: "Batch 2, 4K KV cache"
+    variants_to_run:
+      - decode_q1_kv4k: 2
+
+  decode_b2_kv8k:
+    name: "Decode B2 KV8K"
+    description: "Batch 2, 8K KV cache"
+    variants_to_run:
+      - decode_q1_kv8k: 2
+
+  decode_b2_kv16k:
+    name: "Decode B2 KV16K"
+    description: "Batch 2, 16K KV cache"
+    variants_to_run:
+      - decode_q1_kv16k: 2
+
+  decode_b2_kv32k:
+    name: "Decode B2 KV32K"
+    description: "Batch 2, 32K KV cache"
+    variants_to_run:
+      - decode_q1_kv32k: 2
+
+  # Batch 4
+  decode_b4_kv1k:
+    name: "Decode B4 KV1K"
+    description: "Batch 4, 1K KV cache"
+    variants_to_run:
+      - decode_q1_kv1k: 4
+
+  decode_b4_kv2k:
+    name: "Decode B4 KV2K"
+    description: "Batch 4, 2K KV cache"
+    variants_to_run:
+      - decode_q1_kv2k: 4
+
+  decode_b4_kv4k:
+    name: "Decode B4 KV4K"
+    description: "Batch 4, 4K KV cache"
+    variants_to_run:
+      - decode_q1_kv4k: 4
+
+  decode_b4_kv8k:
+    name: "Decode B4 KV8K"
+    description: "Batch 4, 8K KV cache"
+    variants_to_run:
+      - decode_q1_kv8k: 4
+
+  decode_b4_kv16k:
+    name: "Decode B4 KV16K"
+    description: "Batch 4, 16K KV cache"
+    variants_to_run:
+      - decode_q1_kv16k: 4
+
+  decode_b4_kv32k:
+    name: "Decode B4 KV32K"
+    description: "Batch 4, 32K KV cache"
+    variants_to_run:
+      - decode_q1_kv32k: 4
+
+  # Batch 8
+  decode_b8_kv1k:
+    name: "Decode B8 KV1K"
+    description: "Batch 8, 1K KV cache"
+    variants_to_run:
+      - decode_q1_kv1k: 8
+
+  decode_b8_kv2k:
+    name: "Decode B8 KV2K"
+    description: "Batch 8, 2K KV cache"
+    variants_to_run:
+      - decode_q1_kv2k: 8
+
+  decode_b8_kv4k:
+    name: "Decode B8 KV4K"
+    description: "Batch 8, 4K KV cache"
+    variants_to_run:
+      - decode_q1_kv4k: 8
+
+  decode_b8_kv8k:
+    name: "Decode B8 KV8K"
+    description: "Batch 8, 8K KV cache"
+    variants_to_run:
+      - decode_q1_kv8k: 8
+
+  decode_b8_kv16k:
+    name: "Decode B8 KV16K"
+    description: "Batch 8, 16K KV cache"
+    variants_to_run:
+      - decode_q1_kv16k: 8
+
+  decode_b8_kv32k:
+    name: "Decode B8 KV32K"
+    description: "Batch 8, 32K KV cache"
+    variants_to_run:
+      - decode_q1_kv32k: 8
+
+  # Batch 16
+  decode_b16_kv1k:
+    name: "Decode B16 KV1K"
+    description: "Batch 16, 1K KV cache"
+    variants_to_run:
+      - decode_q1_kv1k: 16
+
+  decode_b16_kv2k:
+    name: "Decode B16 KV2K"
+    description: "Batch 16, 2K KV cache"
+    variants_to_run:
+      - decode_q1_kv2k: 16
+
+  decode_b16_kv4k:
+    name: "Decode B16 KV4K"
+    description: "Batch 16, 4K KV cache"
+    variants_to_run:
+      - decode_q1_kv4k: 16
+
+  decode_b16_kv8k:
+    name: "Decode B16 KV8K"
+    description: "Batch 16, 8K KV cache"
+    variants_to_run:
+      - decode_q1_kv8k: 16
+
+  decode_b16_kv16k:
+    name: "Decode B16 KV16K"
+    description: "Batch 16, 16K KV cache"
+    variants_to_run:
+      - decode_q1_kv16k: 16
+
+  decode_b16_kv32k:
+    name: "Decode B16 KV32K"
+    description: "Batch 16, 32K KV cache"
+    variants_to_run:
+      - decode_q1_kv32k: 16
+
+  # Batch 32
+  decode_b32_kv1k:
+    name: "Decode B32 KV1K"
+    description: "Batch 32, 1K KV cache"
+    variants_to_run:
+      - decode_q1_kv1k: 32
+
+  decode_b32_kv2k:
+    name: "Decode B32 KV2K"
+    description: "Batch 32, 2K KV cache"
+    variants_to_run:
+      - decode_q1_kv2k: 32
+
+  decode_b32_kv4k:
+    name: "Decode B32 KV4K"
+    description: "Batch 32, 4K KV cache"
+    variants_to_run:
+      - decode_q1_kv4k: 32
+
+  decode_b32_kv8k:
+    name: "Decode B32 KV8K"
+    description: "Batch 32, 8K KV cache"
+    variants_to_run:
+      - decode_q1_kv8k: 32
+
+  decode_b32_kv16k:
+    name: "Decode B32 KV16K"
+    description: "Batch 32, 16K KV cache"
+    variants_to_run:
+      - decode_q1_kv16k: 32
+
+  decode_b32_kv32k:
+    name: "Decode B32 KV32K"
+    description: "Batch 32, 32K KV cache"
+    variants_to_run:
+      - decode_q1_kv32k: 32
+
+  # Batch 64
+  decode_b64_kv1k:
+    name: "Decode B64 KV1K"
+    description: "Batch 64, 1K KV cache"
+    variants_to_run:
+      - decode_q1_kv1k: 64
+
+  decode_b64_kv2k:
+    name: "Decode B64 KV2K"
+    description: "Batch 64, 2K KV cache"
+    variants_to_run:
+      - decode_q1_kv2k: 64
+
+  decode_b64_kv4k:
+    name: "Decode B64 KV4K"
+    description: "Batch 64, 4K KV cache"
+    variants_to_run:
+      - decode_q1_kv4k: 64
+
+  decode_b64_kv8k:
+    name: "Decode B64 KV8K"
+    description: "Batch 64, 8K KV cache"
+    variants_to_run:
+      - decode_q1_kv8k: 64
+
+  decode_b64_kv16k:
+    name: "Decode B64 KV16K"
+    description: "Batch 64, 16K KV cache"
+    variants_to_run:
+      - decode_q1_kv16k: 64
+
+  decode_b64_kv32k:
+    name: "Decode B64 KV32K"
+    description: "Batch 64, 32K KV cache"
+    variants_to_run:
+      - decode_q1_kv32k: 64
+
+  # Batch 128
+  decode_b128_kv1k:
+    name: "Decode B128 KV1K"
+    description: "Batch 128, 1K KV cache"
+    variants_to_run:
+      - decode_q1_kv1k: 128
+
+  decode_b128_kv2k:
+    name: "Decode B128 KV2K"
+    description: "Batch 128, 2K KV cache"
+    variants_to_run:
+      - decode_q1_kv2k: 128
+
+  decode_b128_kv4k:
+    name: "Decode B128 KV4K"
+    description: "Batch 128, 4K KV cache"
+    variants_to_run:
+      - decode_q1_kv4k: 128
+
+  decode_b128_kv8k:
+    name: "Decode B128 KV8K"
+    description: "Batch 128, 8K KV cache"
+    variants_to_run:
+      - decode_q1_kv8k: 128
+
+  decode_b128_kv16k:
+    name: "Decode B128 KV16K"
+    description: "Batch 128, 16K KV cache"
+    variants_to_run:
+      - decode_q1_kv16k: 128
+
+  decode_b128_kv32k:
+    name: "Decode B128 KV32K"
+    description: "Batch 128, 32K KV cache"
+    variants_to_run:
+      - decode_q1_kv32k: 128

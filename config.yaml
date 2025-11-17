@@ -6,7 +6,7 @@ model:
   num_qo_heads: 8
   num_kv_heads: 1
   head_dim: 128
-  page_size: 16
+  page_size: 256
   workspace_size: 134217728  # 128 MB
 
 # Profiling Configuration
@@ -18,6 +18,16 @@ profiling:
 output:
   results_dir: "results"
   plots_dir: "plots"
+
+
+# Approaches to benchmark
+approaches:
+  - flashinfer_mixed_fa2
+  - flashinfer_mixed_fa3
+  - flashinfer_mixed_cudnn
+  - flashinfer_separated_fa2
+  - flashinfer_separated_fa3
+  - official_fa3
 
 # Variants
 variants:

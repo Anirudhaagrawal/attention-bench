@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
-"""FlashInfer Heterogeneity Benchmark
+"""FlashInfer Prefill Tolerance Benchmark (v2 - Refactored with Approach Registry)
 
-Benchmarks FlashInfer's performance on heterogeneous batches by comparing:
-- Mixed approach: Single wrapper processing all requests
-- Bucketed approach: Separate wrappers for homogeneous request groups
+Compares multiple attention implementations:
+- FlashInfer: Mixed FA2/FA3, Separated FA2/FA3, BatchAttention, cuDNN
+- Official FlashAttention-3
 
 Usage:
-    python run_benchmark.py [--config CONFIG_PATH]
+    python run_benchmark.py [--config config.yaml]
+    python run_benchmark.py --approaches official_fa3,flashinfer_mixed_fa3
 """
 
 import argparse
 import json
+import math
 import os
 import time
-from collections import defaultdict
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from dataclasses import dataclass, field
+from typing import Any, Dict, List, Tuple, Optional, Callable
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -24,12 +24,24 @@ import torch
 import yaml
 
 import flashinfer
+from flashinfer import BatchPrefillWithPagedKVCacheWrapper, BatchDecodeWithPagedKVCacheWrapper
+from flashinfer.page import get_seq_lens
+
+# Import approaches registry
+from approaches import APPROACHES, BenchmarkContext
+
+# Check for BatchAttention availability
+try:
+    from flashinfer import BatchAttention
+    HAS_BATCH_ATTENTION = True
+except ImportError:
+    BatchAttention = None
+    HAS_BATCH_ATTENTION = False
 
 
 @dataclass
 class BenchmarkConfig:
     """Configuration for benchmark execution."""
-
     num_qo_heads: int
     num_kv_heads: int
     head_dim: int
@@ -37,51 +49,36 @@ class BenchmarkConfig:
     workspace_size: int
     num_warmup_iters: int
     num_active_iters: int
-    results_dir: str
-    plots_dir: str
+    use_cuda_graphs: bool = False
+    enable_profiling: bool = False
+    results_dir: str = "results"
+    plots_dir: str = "plots"
+    approach_overrides: Dict[str, Dict[str, Any]] = field(default_factory=dict)
 
 
 @dataclass
 class VariantConfig:
     """Configuration for a request variant."""
-
     name: str
     q_tokens: int
     kv_tokens: int
-    description: str
+    description: str = ""
 
 
 @dataclass
-class ExperimentResult:
-    """Results from a single experiment."""
-
+class ToleranceResult:
+    """Results from a tolerance test."""
     scenario_name: str
-    variant_set_id: int
-    variant_counts: Dict[str, int]
-    mixed_time_ms: float
-    bucketed_time_ms: float
-    total_q_tokens: int
-    total_kv_tokens: int
-    num_requests: int
-    num_buckets: int
-
-    def to_json(self) -> Dict[str, Any]:
-        """Convert ExperimentResult to JSON-serializable dictionary."""
-        return {
-            "scenario_name": self.scenario_name,
-            "variant_set_id": self.variant_set_id,
-            "variant_counts": self.variant_counts,
-            "mixed_time_ms": self.mixed_time_ms,
-            "bucketed_time_ms": self.bucketed_time_ms,
-            "total_q_tokens": self.total_q_tokens,
-            "total_kv_tokens": self.total_kv_tokens,
-            "num_requests": self.num_requests,
-            "num_buckets": self.num_buckets,
-        }
+    num_decodes: int
+    num_prefills: int
+    prefill_ratio: float
+    approach_times: Dict[str, Optional[float]]
+    page_sizes: Dict[str, int]
+    used_cuda_graphs: bool
 
 
-class BenchmarkRunner:
-    """Runs FlashInfer heterogeneity benchmarks."""
+class ToleranceBenchmarkRunner:
+    """Runs tolerance benchmarks."""
 
     def __init__(self, config: BenchmarkConfig, variants: Dict[str, VariantConfig]):
         self.config = config
@@ -89,363 +86,526 @@ class BenchmarkRunner:
 
     def create_batch_data(
         self, q_lengths: List[int], kv_lengths: List[int]
-    ) -> Tuple[torch.Tensor, ...]:
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """Create tensors and metadata for a batch of requests."""
-        num_pages = [
-            (kv + self.config.page_size - 1) // self.config.page_size
-            for kv in kv_lengths
-        ]
+        num_pages = [(kv + self.config.page_size - 1) // self.config.page_size for kv in kv_lengths]
 
+        # Create Q and KV cache tensors
         q = torch.randn(
-            sum(q_lengths),
-            self.config.num_qo_heads,
-            self.config.head_dim,
-            dtype=torch.float16,
-            device="cuda",
-        )
-        kv_cache = torch.randn(
-            sum(num_pages),
-            2,
-            self.config.page_size,
-            self.config.num_kv_heads,
-            self.config.head_dim,
-            dtype=torch.float16,
-            device="cuda",
+            sum(q_lengths), self.config.num_qo_heads, self.config.head_dim,
+            dtype=torch.float16, device="cuda"
         )
 
+        kv_cache = torch.randn(
+            sum(num_pages), 2, self.config.page_size, self.config.num_kv_heads, self.config.head_dim,
+            dtype=torch.float16, device="cuda"
+        )
+
+        # Create metadata tensors
         qo_indptr = torch.tensor(
             [0] + list(torch.cumsum(torch.tensor(q_lengths), 0)),
-            dtype=torch.int32,
-            device="cuda",
+            dtype=torch.int32, device="cuda"
         )
+
         kv_page_indices = torch.arange(sum(num_pages), dtype=torch.int32, device="cuda")
+
         kv_page_indptr = torch.tensor(
             [0] + list(torch.cumsum(torch.tensor(num_pages), 0)),
-            dtype=torch.int32,
-            device="cuda",
+            dtype=torch.int32, device="cuda"
         )
+
         kv_last_page_len = torch.tensor(
-            [kv % self.config.page_size if kv % self.config.page_size != 0 else self.config.page_size for kv in kv_lengths],
-            dtype=torch.int32,
-            device="cuda",
+            [kv % self.config.page_size if kv % self.config.page_size != 0 else self.config.page_size
+             for kv in kv_lengths],
+            dtype=torch.int32, device="cuda"
         )
 
         return q, kv_cache, qo_indptr, kv_page_indptr, kv_page_indices, kv_last_page_len
 
-    def build_workload(
-        self, variant_set: Dict[str, int]
-    ) -> Tuple[List[int], List[int], List[str]]:
-        """Build workload from variant set specification."""
-        all_q_lengths = []
-        all_kv_lengths = []
-        all_variant_names = []
+    def _create_benchmark_context(
+        self, all_q_lengths: List[int], all_kv_lengths: List[int], page_size: int
+    ) -> BenchmarkContext:
+        """Create complete benchmark context with ALL parameters (superset).
 
-        for variant_name, count in variant_set.items():
-            variant = self.variants[variant_name]
-            for _ in range(count):
-                all_q_lengths.append(variant.q_tokens)
-                all_kv_lengths.append(variant.kv_tokens)
-                all_variant_names.append(variant_name)
-
-        return all_q_lengths, all_kv_lengths, all_variant_names
-
-    def benchmark_approach(
-        self,
-        all_q_lengths: List[int],
-        all_kv_lengths: List[int],
-        all_variant_names: List[str]
-    ) -> Tuple[float, int]:
-        """Benchmark inference approach by grouping requests by variant name.
-
-        For mixed approach, pass identical variant names for all requests.
-        For bucketed approach, pass actual variant names to group by.
+        This method computes ALL possible parameters that any approach might need.
+        Each approach can then select what it needs from this complete context.
 
         Args:
-            all_q_lengths: Query token lengths for all requests
-            all_kv_lengths: KV token lengths for all requests
-            all_variant_names: Variant names for grouping requests into buckets
+            all_q_lengths: Query sequence lengths for all requests
+            all_kv_lengths: KV cache lengths for all requests
+            page_size: Page size to use for this benchmark
 
         Returns:
-            Tuple of (average inference time in milliseconds, number of buckets used)
+            BenchmarkContext with all computed parameters
         """
-        # Organize requests by variant name
-        variant_q = defaultdict(list)
-        variant_kv = defaultdict(list)
+        # Temporarily override page_size for batch data creation
+        original_page_size = self.config.page_size
+        self.config.page_size = page_size
 
-        for q_len, kv_len, variant_name in zip(all_q_lengths, all_kv_lengths, all_variant_names):
-            variant_q[variant_name].append(q_len)
-            variant_kv[variant_name].append(kv_len)
+        # Create batch data
+        q, kv_cache, qo_indptr, kv_page_indptr, kv_page_indices, kv_last_page_len = (
+            self.create_batch_data(all_q_lengths, all_kv_lengths)
+        )
 
-        # Create wrappers for each bucket
-        wrappers = {}
-        batch_data = {}
-        variant_names = list(variant_q.keys())
+        # Restore original page_size
+        self.config.page_size = original_page_size
 
-        for variant_name in variant_names:
-            q, kv_cache, qo_indptr, kv_page_indptr, kv_page_indices, kv_last_page_len = (
-                self.create_batch_data(variant_q[variant_name], variant_kv[variant_name])
-            )
+        # Compute ALL optional tensors unconditionally (superset)
+        seq_lens_kv = get_seq_lens(
+            kv_page_indptr.cpu(), kv_last_page_len.cpu(), page_size
+        ).to("cuda")
 
-            workspace = torch.empty(
-                self.config.workspace_size, dtype=torch.uint8, device="cuda"
-            )
-            wrapper = flashinfer.BatchPrefillWithPagedKVCacheWrapper(workspace, "NHD")
-            wrapper.plan(
-                qo_indptr,
-                kv_page_indptr,
-                kv_page_indices,
-                kv_last_page_len,
-                self.config.num_qo_heads,
-                self.config.num_kv_heads,
-                self.config.head_dim,
-                self.config.page_size,
-                causal=True,
-            )
+        seq_lens_q = (qo_indptr[1:] - qo_indptr[:-1])
 
-            wrappers[variant_name] = wrapper
-            batch_data[variant_name] = (q, kv_cache)
+        max_token_per_sequence = seq_lens_q.max().item()
+        max_sequence_kv = seq_lens_kv.max().item()
 
-        # Warmup
-        for _ in range(self.config.num_warmup_iters):
-            for variant_name in variant_names:
-                q, kv_cache = batch_data[variant_name]
-                wrappers[variant_name].run(q, kv_cache)
-        torch.cuda.synchronize()
+        # Create block_tables
+        batch_size = len(qo_indptr) - 1
+        max_num_blocks_per_seq = math.ceil(max_sequence_kv / page_size)
 
-        # Benchmark
-        start = torch.cuda.Event(enable_timing=True)
-        end = torch.cuda.Event(enable_timing=True)
-        start.record()
-        for _ in range(self.config.num_active_iters):
-            for variant_name in variant_names:
-                q, kv_cache = batch_data[variant_name]
-                wrappers[variant_name].run(q, kv_cache)
-        end.record()
-        torch.cuda.synchronize()
+        block_tables = torch.zeros(
+            (batch_size, max_num_blocks_per_seq),
+            dtype=torch.int32, device="cuda",
+        )
 
-        avg_time_ms = start.elapsed_time(end) / self.config.num_active_iters
-        num_buckets = len(variant_names)
+        # Fill block_tables
+        for i in range(batch_size):
+            start_idx = kv_page_indptr[i]
+            end_idx = kv_page_indptr[i + 1]
+            num_blocks = end_idx - start_idx
+            block_tables[i, :num_blocks] = kv_page_indices[start_idx:end_idx]
 
-        return avg_time_ms, num_buckets
+        return BenchmarkContext(
+            q_lengths=all_q_lengths,
+            kv_lengths=all_kv_lengths,
+            q=q,
+            kv_cache=kv_cache,
+            qo_indptr=qo_indptr,
+            kv_page_indptr=kv_page_indptr,
+            kv_page_indices=kv_page_indices,
+            kv_last_page_len=kv_last_page_len,
+            seq_lens_q=seq_lens_q,
+            seq_lens_kv=seq_lens_kv,
+            block_tables=block_tables,
+            max_token_per_sequence=max_token_per_sequence,
+            max_sequence_kv=max_sequence_kv,
+            num_qo_heads=self.config.num_qo_heads,
+            num_kv_heads=self.config.num_kv_heads,
+            head_dim=self.config.head_dim,
+            page_size=page_size,
+            workspace_size=self.config.workspace_size,
+            num_warmup_iters=self.config.num_warmup_iters,
+            num_active_iters=self.config.num_active_iters,
+        )
 
-    def run_experiment(
-        self, scenario_name: str, variant_set_id: int, variant_set: Dict[str, int]
-    ) -> ExperimentResult:
-        """Run complete experiment for a variant set."""
+    def run_tolerance_test(
+        self,
+        scenario_name: str,
+        variant_set: Dict[str, int],
+        approaches_to_run: List[str]
+    ) -> ToleranceResult:
+        """Run tolerance test for a scenario using specified approaches.
+
+        Args:
+            scenario_name: Name of the scenario
+            variant_set: Dictionary mapping variant names to counts
+            approaches_to_run: List of approach names to benchmark
+        """
         print(f"\n{'=' * 80}")
-        print(f"Scenario: {scenario_name} | Variant Set {variant_set_id}")
+        print(f"Scenario: {scenario_name}")
         print(f"{'=' * 80}")
 
         # Build workload
-        all_q_lengths, all_kv_lengths, all_variant_names = self.build_workload(variant_set)
+        all_q_lengths = []
+        all_kv_lengths = []
 
-        print(f"\nWorkload: {len(all_q_lengths)} requests")
-        for variant_name, count in variant_set.items():
-            variant = self.variants[variant_name]
-            print(f"  {variant_name}: {count}x ({variant.description})")
-        print(f"  Total Q tokens:  {sum(all_q_lengths):,}")
-        print(f"  Total KV tokens: {sum(all_kv_lengths):,}")
+        # Handle both dict and list formats
+        if isinstance(variant_set, list):
+            # List format: [{"variant_name": count}, ...]
+            for item in variant_set:
+                for variant_name, count in item.items():
+                    variant = self.variants[variant_name]
+                    for _ in range(count):
+                        all_q_lengths.append(variant.q_tokens)
+                        all_kv_lengths.append(variant.kv_tokens)
+        else:
+            # Dict format: {"variant_name": count, ...}
+            for variant_name, count in variant_set.items():
+                variant = self.variants[variant_name]
+                for _ in range(count):
+                    all_q_lengths.append(variant.q_tokens)
+                    all_kv_lengths.append(variant.kv_tokens)
 
-        # Run benchmarks
-        print("\nBenchmarking mixed approach...")
-        mixed_time, _ = self.benchmark_approach(
-            all_q_lengths, all_kv_lengths, ["mixed"] * len(all_q_lengths)
-        )
-        print(f"  Mixed time: {mixed_time:.3f} ms")
+        num_decodes = sum(1 for q in all_q_lengths if q == 1)
+        num_prefills = sum(1 for q in all_q_lengths if q > 1)
+        prefill_ratio = num_prefills / len(all_q_lengths) if len(all_q_lengths) > 0 else 0
 
-        print("\nBenchmarking bucketed approach...")
-        bucketed_time, num_buckets = self.benchmark_approach(
-            all_q_lengths, all_kv_lengths, all_variant_names
-        )
-        print(f"  Bucketed time: {bucketed_time:.3f} ms")
+        print(f"\nWorkload: {num_decodes} decodes + {num_prefills} prefills ({prefill_ratio*100:.1f}% prefill)")
+        print(f"Approaches to run: {', '.join(approaches_to_run)}\n")
 
-        return ExperimentResult(
+        # Run each approach
+        approach_times = {}
+        page_sizes = {}
+
+        for i, approach_name in enumerate(approaches_to_run, 1):
+            approach = APPROACHES.get(approach_name)
+            if approach is None:
+                print(f"[{i}/{len(approaches_to_run)}] {approach_name}: SKIPPED (not registered)")
+                continue
+
+            print(f"[{i}/{len(approaches_to_run)}] {approach_name}...")
+
+            # Determine page_size: check overrides, then approach default, then global default
+            page_size = self.config.page_size
+            if approach_name in self.config.approach_overrides:
+                page_size = self.config.approach_overrides[approach_name].get("page_size", page_size)
+            else:
+                page_size = getattr(approach, "default_page_size", page_size)
+
+            # Run the approach
+            try:
+                # All approaches use setup() interface
+                ctx = self._create_benchmark_context(all_q_lengths, all_kv_lengths, page_size)
+
+                # Approach sets up and returns callable
+                run_fn = approach.setup(ctx)
+
+                # Runner handles warmup
+                for _ in range(ctx.num_warmup_iters):
+                    run_fn()
+                torch.cuda.synchronize()
+
+                # Runner handles timing
+                start = torch.cuda.Event(enable_timing=True)
+                end = torch.cuda.Event(enable_timing=True)
+                start.record()
+                for _ in range(ctx.num_active_iters):
+                    run_fn()
+                end.record()
+                torch.cuda.synchronize()
+
+                time_ms = start.elapsed_time(end) / ctx.num_active_iters
+
+                approach_times[approach_name] = time_ms
+                page_sizes[approach_name] = page_size
+                print(f"  {approach_name}: {time_ms:.3f} ms (page_size={page_size})")
+
+            except Exception as e:
+                print(f"  {approach_name}: FAILED - {e}")
+                approach_times[approach_name] = None
+
+        # Print summary
+        print(f"\n{'=' * 80}")
+        print("RESULTS:")
+        for approach_name in approaches_to_run:
+            if approach_name in approach_times and approach_times[approach_name] is not None:
+                time_ms = approach_times[approach_name]
+                ps = page_sizes.get(approach_name, self.config.page_size)
+                print(f"  {approach_name:35s}: {time_ms:8.3f} ms (page_size={ps})")
+            else:
+                print(f"  {approach_name:35s}:      N/A")
+
+        # Find winner
+        valid_times = {k: v for k, v in approach_times.items() if v is not None}
+        if valid_times:
+            winner = min(valid_times, key=valid_times.get)
+            print(f"\n  Winner: {winner} ({valid_times[winner]:.3f} ms)")
+        else:
+            print(f"\n  Winner: N/A (no successful runs)")
+
+        print(f"  CUDA Graphs: {'ENABLED' if self.config.use_cuda_graphs else 'DISABLED'}")
+        print(f"{'=' * 80}")
+
+        return ToleranceResult(
             scenario_name=scenario_name,
-            variant_set_id=variant_set_id,
-            variant_counts=variant_set,
-            mixed_time_ms=mixed_time,
-            bucketed_time_ms=bucketed_time,
-            total_q_tokens=sum(all_q_lengths),
-            total_kv_tokens=sum(all_kv_lengths),
-            num_requests=len(all_q_lengths),
-            num_buckets=num_buckets,
+            num_decodes=num_decodes,
+            num_prefills=num_prefills,
+            prefill_ratio=prefill_ratio,
+            approach_times=approach_times,
+            page_sizes=page_sizes,
+            used_cuda_graphs=self.config.use_cuda_graphs,
         )
 
 
-def load_config(config_path: str) -> Tuple[BenchmarkConfig, Dict[str, VariantConfig], Dict[str, Any]]:
+def load_config(config_path: str, use_cuda_graphs: bool, enable_profiling: bool = False):
     """Load configuration from YAML file."""
     with open(config_path) as f:
         config_data = yaml.safe_load(f)
 
-    benchmark_config = BenchmarkConfig(
-        num_qo_heads=config_data["model"]["num_qo_heads"],
-        num_kv_heads=config_data["model"]["num_kv_heads"],
-        head_dim=config_data["model"]["head_dim"],
-        page_size=config_data["model"]["page_size"],
-        workspace_size=config_data["model"]["workspace_size"],
+    # Get approaches list (default to FlashInfer approaches if not specified)
+    approaches = config_data.get("approaches", [
+        "flashinfer_mixed_fa2",
+        "flashinfer_mixed_fa3",
+        "flashinfer_separated_fa2",
+        "flashinfer_separated_fa3",
+        "flashinfer_batch_attention",
+    ])
+
+    # Load model config
+    model_config = config_data["model"]
+    config = BenchmarkConfig(
+        num_qo_heads=model_config["num_qo_heads"],
+        num_kv_heads=model_config["num_kv_heads"],
+        head_dim=model_config["head_dim"],
+        page_size=model_config.get("page_size", 16),
+        workspace_size=model_config.get("workspace_size", 256 * 1024 * 1024),
         num_warmup_iters=config_data["profiling"]["num_warmup_iters"],
         num_active_iters=config_data["profiling"]["num_active_iters"],
+        use_cuda_graphs=use_cuda_graphs,
+        enable_profiling=enable_profiling,
         results_dir=config_data["output"]["results_dir"],
         plots_dir=config_data["output"]["plots_dir"],
+        approach_overrides=config_data.get("approach_overrides", {}),
     )
 
-    variants = {
-        name: VariantConfig(
-            name=name,
-            q_tokens=data["q_tokens"],
-            kv_tokens=data["kv_tokens"],
-            description=data["description"],
+    # Load variants
+    variants = {}
+    for variant_name, variant_data in config_data["variants"].items():
+        variants[variant_name] = VariantConfig(
+            name=variant_name,
+            q_tokens=variant_data["q_tokens"],
+            kv_tokens=variant_data["kv_tokens"],
+            description=variant_data.get("description", ""),
         )
-        for name, data in config_data["variants"].items()
-    }
 
+    # Load scenarios
     scenarios = config_data["scenarios"]
 
-    return benchmark_config, variants, scenarios
+    return config, variants, scenarios, approaches
 
 
-def save_results(results: List[ExperimentResult], output_path: str) -> None:
-    """Save experiment results to JSON file."""
-    results_data = [r.to_json() for r in results]
+def save_results(results: List[ToleranceResult], output_path: str):
+    """Save results to JSON file."""
+    output_data = []
+    for result in results:
+        output_data.append({
+            "scenario_name": result.scenario_name,
+            "num_decodes": result.num_decodes,
+            "num_prefills": result.num_prefills,
+            "prefill_ratio": result.prefill_ratio,
+            "approach_times": result.approach_times,
+            "page_sizes": result.page_sizes,
+            "used_cuda_graphs": result.used_cuda_graphs,
+        })
 
     with open(output_path, "w") as f:
-        json.dump(results_data, f, indent=2)
+        json.dump(output_data, f, indent=2)
 
-    print(f"\nResults saved to: {output_path}")
 
-class PlotGenerator:
-    """Generates visualization plots for benchmark results."""
+def _get_grid_layout(num_subplots: int) -> Tuple[int, int]:
+    """Calculate grid layout (rows, cols) for given number of subplots."""
+    if num_subplots == 1:
+        return (1, 1)
+    elif num_subplots == 2:
+        return (1, 2)
+    elif num_subplots <= 4:
+        return (2, 2)
+    elif num_subplots <= 6:
+        return (2, 3)
+    elif num_subplots <= 9:
+        return (3, 3)
+    elif num_subplots <= 12:
+        return (3, 4)
+    else:
+        return (4, 4)
 
-    def __init__(self, plots_dir: str):
-        self.plots_dir = plots_dir
-        os.makedirs(plots_dir, exist_ok=True)
 
-    @staticmethod
-    def _add_bar_labels(ax, bars, format_str="{:.1f}"):
-        """Add value labels on top of bars."""
+def create_plots(results: List[ToleranceResult], plots_dir: str, config_name: str, approaches: List[str]):
+    """Create comparison plots with pagination support."""
+    os.makedirs(plots_dir, exist_ok=True)
+
+    print(f"\nCreating plots for {len(results)} scenarios with {len(approaches)} approaches...")
+
+    MAX_SCENARIOS_PER_PAGE = 12  # 3x4 grid maximum
+
+    if len(results) == 1:
+        print("  Using single plot layout")
+        # Single scenario - single bar chart
+        result = results[0]
+
+        fig, ax = plt.subplots(figsize=(10, 6))
+
+        # Get times for each approach
+        approach_names = []
+        times = []
+
+        for approach_name in approaches:
+            if approach_name in result.approach_times and result.approach_times[approach_name] is not None:
+                approach_names.append(approach_name)
+                times.append(result.approach_times[approach_name])
+
+        # Create bar chart
+        x = np.arange(len(approach_names))
+        bars = ax.bar(x, times, color='steelblue', alpha=0.8)
+
+        # Customize plot
+        ax.set_xlabel('Approach', fontsize=12)
+        ax.set_ylabel('Time (ms)', fontsize=12)
+        ax.set_title(f'{result.scenario_name}\n({result.num_decodes} decodes + {result.num_prefills} prefills)', fontsize=14)
+        ax.set_xticks(x)
+        ax.set_xticklabels(approach_names, rotation=45, ha='right')
+        ax.grid(True, alpha=0.3, axis='y')
+
+        # Add value labels on bars
         for bar in bars:
             height = bar.get_height()
-            ax.text(bar.get_x() + bar.get_width() / 2, height, format_str.format(height),
-                   ha="center", va="bottom", fontsize=7)
+            ax.text(bar.get_x() + bar.get_width()/2., height,
+                   f'{height:.2f}',
+                   ha='center', va='bottom', fontsize=9)
 
-    def _plot_comparison_bars(self, ax, scenario_data, scenario_name=None):
-        """Plot comparison bars for mixed vs bucketed performance."""
-        x = np.arange(len(scenario_data))
-        bars1 = ax.bar(x - 0.175, [r.mixed_time_ms for r in scenario_data], 0.35,
-                      label="Mixed", color="#ff7f0e")
-        bars2 = ax.bar(x + 0.175, [r.bucketed_time_ms for r in scenario_data], 0.35,
-                      label="Bucketed", color="#2ca02c")
-
-        ax.set(xlabel="Variant Set", ylabel="Latency (ms)",
-              xticks=x, xticklabels=[f"Set {r.variant_set_id}" for r in scenario_data])
-        if scenario_name:
-            ax.set_title(scenario_name, fontweight="bold")
-        ax.legend()
-        ax.grid(axis="y", alpha=0.3)
-        self._add_bar_labels(ax, bars1)
-        self._add_bar_labels(ax, bars2)
-
-    def _plot_speedup_bars(self, ax, scenario_data, scenario_name=None):
-        """Plot speedup/improvement bars."""
-        speedup_factors = [(r.mixed_time_ms / r.bucketed_time_ms - 1) * 100 for r in scenario_data]
-        colors = ["#2ca02c" if f > 0 else "#d62728" for f in speedup_factors]
-
-        x = np.arange(len(scenario_data))
-        bars = ax.bar(x, speedup_factors, color=colors, alpha=0.7)
-        ax.axhline(y=0, color="black", linestyle="-", linewidth=0.8)
-        ax.set(xlabel="Variant Set", ylabel="Bucketed Improvement (%)",
-              xticks=x, xticklabels=[f"Set {r.variant_set_id}" for r in scenario_data])
-        if scenario_name:
-            ax.set_title(f"{scenario_name}\nPositive = Bucketed Faster, Negative = Mixed Faster",
-                        fontweight="bold")
-        ax.grid(axis="y", alpha=0.3)
-
-        for bar, val in zip(bars, speedup_factors):
-            ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height(), f"{val:+.1f}%",
-                   ha="center", va="bottom" if val > 0 else "top", fontsize=8)
-
-    def _save_multi_scenario_plot(self, scenario_results, plot_func, filename, title, figsize_height=6):
-        """Generic method to create and save multi-scenario plots."""
-        num_scenarios = len(scenario_results)
-        fig, axes = plt.subplots(num_scenarios, 1, figsize=(16, figsize_height * num_scenarios))
-        axes = [axes] if num_scenarios == 1 else axes
-
-        for ax, (scenario_name, scenario_data) in zip(axes, scenario_results.items()):
-            plot_func(ax, scenario_data, scenario_name)
-
-        plt.suptitle(title, fontsize=14, fontweight="bold", y=0.995)
         plt.tight_layout()
-        plt.savefig(os.path.join(self.plots_dir, filename), dpi=150, bbox_inches="tight")
+        output_path = os.path.join(plots_dir, f"comparison_{config_name}.png")
+        plt.savefig(output_path, dpi=150, bbox_inches='tight')
         plt.close()
 
-    def generate_all_plots(self, results: List[ExperimentResult]) -> None:
-        """Generate all visualization plots from experiment results."""
-        # Group by scenario
-        scenario_results = defaultdict(list)
-        for result in results:
-            scenario_results[result.scenario_name].append(result)
+        print(f"Plot saved to: {output_path}")
 
-        # Multi-scenario plots
-        self._save_multi_scenario_plot(scenario_results, self._plot_comparison_bars,
-                                      "comparison_by_scenario.png",
-                                      "FlashInfer: Mixed vs Bucketed Performance", 6)
-        self._save_multi_scenario_plot(scenario_results, self._plot_speedup_bars,
-                                      "speedup_by_scenario.png",
-                                      "Bucketed vs Mixed: Performance Improvement", 5)
+    elif len(results) <= MAX_SCENARIOS_PER_PAGE:
+        print(f"  Using subplot layout (single page)")
+        # Multiple scenarios - single page with subplots
+        rows, cols = _get_grid_layout(len(results))
 
-        # Individual scenario plots
-        print("\nGenerating per-scenario plots...")
-        per_scenario_dir = os.path.join(self.plots_dir, "per_scenario")
-        os.makedirs(per_scenario_dir, exist_ok=True)
+        fig, axes = plt.subplots(rows, cols, figsize=(6*cols, 5*rows))
+        if len(results) == 1:
+            axes = [axes]
+        else:
+            axes = axes.flatten()
 
-        for scenario_name, scenario_data in scenario_results.items():
-            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
-            self._plot_comparison_bars(ax1, scenario_data)
-            self._plot_speedup_bars(ax2, scenario_data)
-            plt.suptitle(scenario_name, fontsize=13, fontweight="bold")
+        for idx, result in enumerate(results):
+            ax = axes[idx]
+
+            # Get times for each approach
+            approach_names = []
+            times = []
+
+            for approach_name in approaches:
+                if approach_name in result.approach_times and result.approach_times[approach_name] is not None:
+                    approach_names.append(approach_name)
+                    times.append(result.approach_times[approach_name])
+
+            # Create bar chart
+            x = np.arange(len(approach_names))
+            bars = ax.bar(x, times, color='steelblue', alpha=0.8)
+
+            # Customize subplot
+            ax.set_ylabel('Time (ms)', fontsize=10)
+            ax.set_title(f'{result.scenario_name}\n({result.num_decodes}D + {result.num_prefills}P)', fontsize=11)
+            ax.set_xticks(x)
+            ax.set_xticklabels(approach_names, rotation=45, ha='right', fontsize=8)
+            ax.grid(True, alpha=0.3, axis='y')
+
+            # Add value labels on bars
+            for bar in bars:
+                height = bar.get_height()
+                ax.text(bar.get_x() + bar.get_width()/2., height,
+                       f'{height:.1f}',
+                       ha='center', va='bottom', fontsize=7)
+
+        # Hide extra subplots
+        for idx in range(len(results), len(axes)):
+            axes[idx].axis('off')
+
+        plt.tight_layout()
+        output_path = os.path.join(plots_dir, f"comparison_{config_name}.png")
+        plt.savefig(output_path, dpi=150, bbox_inches='tight')
+        plt.close()
+
+        print(f"Plot saved to: {output_path}")
+
+    else:
+        # Many scenarios - use pagination
+        num_pages = math.ceil(len(results) / MAX_SCENARIOS_PER_PAGE)
+        print(f"  Using pagination: {num_pages} pages with up to {MAX_SCENARIOS_PER_PAGE} subplots each")
+
+        for page_num in range(num_pages):
+            start_idx = page_num * MAX_SCENARIOS_PER_PAGE
+            end_idx = min(start_idx + MAX_SCENARIOS_PER_PAGE, len(results))
+            page_results = results[start_idx:end_idx]
+
+            print(f"    Creating page {page_num + 1}/{num_pages} ({len(page_results)} scenarios)...")
+
+            # Create subplot grid for this page
+            rows, cols = _get_grid_layout(len(page_results))
+            fig, axes = plt.subplots(rows, cols, figsize=(6*cols, 5*rows))
+
+            if len(page_results) == 1:
+                axes = [axes]
+            else:
+                axes = axes.flatten()
+
+            for idx, result in enumerate(page_results):
+                ax = axes[idx]
+
+                # Get times for each approach
+                approach_names = []
+                times = []
+
+                for approach_name in approaches:
+                    if approach_name in result.approach_times and result.approach_times[approach_name] is not None:
+                        approach_names.append(approach_name)
+                        times.append(result.approach_times[approach_name])
+
+                # Create bar chart
+                x = np.arange(len(approach_names))
+                bars = ax.bar(x, times, color='steelblue', alpha=0.8)
+
+                # Customize subplot
+                ax.set_ylabel('Time (ms)', fontsize=10)
+                ax.set_title(f'{result.scenario_name}\n({result.num_decodes}D + {result.num_prefills}P)', fontsize=11)
+                ax.set_xticks(x)
+                ax.set_xticklabels(approach_names, rotation=45, ha='right', fontsize=8)
+                ax.grid(True, alpha=0.3, axis='y')
+
+                # Add value labels on bars
+                for bar in bars:
+                    height = bar.get_height()
+                    ax.text(bar.get_x() + bar.get_width()/2., height,
+                           f'{height:.1f}',
+                           ha='center', va='bottom', fontsize=7)
+
+            # Hide extra subplots
+            for idx in range(len(page_results), len(axes)):
+                axes[idx].axis('off')
+
             plt.tight_layout()
 
-            safe_filename = scenario_name.replace(" ", "_").replace("/", "_").lower()
-            plt.savefig(os.path.join(per_scenario_dir, f"{safe_filename}.png"),
-                       dpi=150, bbox_inches="tight")
+            # Save with page number
+            output_path = os.path.join(plots_dir, f"comparison_{config_name}_page{page_num + 1}.png")
+            plt.savefig(output_path, dpi=150, bbox_inches='tight')
             plt.close()
 
-        print(f"Plots saved to: {self.plots_dir}/")
-        print(f"  - comparison_by_scenario.png")
-        print(f"  - speedup_by_scenario.png")
-        print(f"  - per_scenario/*.png ({len(scenario_results)} individual scenario plots)")
-
-
-def create_plots(results: List[ExperimentResult], plots_dir: str) -> None:
-    """Create visualization plots from experiment results."""
-    plot_generator = PlotGenerator(plots_dir)
-    plot_generator.generate_all_plots(results)
+            print(f"      Page saved to: {output_path}")
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Run FlashInfer heterogeneity benchmark")
-    parser.add_argument(
-        "--config",
-        type=str,
-        default="config.yaml",
-        help="Path to configuration file",
-    )
+    parser = argparse.ArgumentParser(description="FlashInfer Tolerance Benchmark")
+    parser.add_argument("--config", type=str, default="config.yaml", help="Path to config file")
+    parser.add_argument("--use-cuda-graphs", action="store_true", help="Enable CUDA graphs")
+    parser.add_argument("--enable-profiling", action="store_true", help="Enable profiling")
+    parser.add_argument("--approaches", type=str, help="Comma-separated list of approaches to run")
     args = parser.parse_args()
 
-    print("=" * 80)
-    print("FlashInfer Heterogeneity Benchmark")
-    print("=" * 80)
-    print(f"\nLoading configuration from: {args.config}")
+    # Load config
+    config, variants, scenarios, approaches = load_config(
+        args.config, args.use_cuda_graphs, args.enable_profiling
+    )
 
-    # Load configuration
-    benchmark_config, variants, scenarios = load_config(args.config)
+    # Override approaches if specified
+    if args.approaches:
+        approaches = [a.strip() for a in args.approaches.split(",")]
 
+    # Print header
+    print("=" * 80)
+    print("FlashInfer Prefill Tolerance Benchmark (v2 - Refactored)")
+    print("=" * 80)
+    print(f"\nConfig: {args.config}")
+    print(f"CUDA Graphs: {'ENABLED' if args.use_cuda_graphs else 'DISABLED'}")
+    print(f"Profiling:   {'ENABLED' if args.enable_profiling else 'DISABLED'}")
     print(f"Loaded {len(variants)} variants")
     print(f"Loaded {len(scenarios)} scenarios")
-
-    # Create output directories
-    os.makedirs(benchmark_config.results_dir, exist_ok=True)
-    os.makedirs(benchmark_config.plots_dir, exist_ok=True)
+    print(f"Approaches: {', '.join(approaches)}")
+    print(f"\nAvailable approaches: {', '.join(APPROACHES.list_available())}")
 
     # Print environment info
     print("\n" + "=" * 80)
@@ -456,41 +616,63 @@ def main():
     print(f"CUDA:       {torch.version.cuda}")
     print(f"GPU:        {torch.cuda.get_device_name(0)}")
 
-    # Run experiments
+    # Create runner
+    runner = ToleranceBenchmarkRunner(config, variants)
+
+    # Run benchmarks
     print("\n" + "=" * 80)
-    print("Running Experiments")
+    print("Running Tolerance Tests")
     print("=" * 80)
 
-    runner = BenchmarkRunner(benchmark_config, variants)
-    all_results = []
-
-    for scenario_name, scenario_data in scenarios.items():
-        variant_sets = scenario_data["variants_to_run"]
-
-        for variant_set_id, variant_set in enumerate(variant_sets):
-            result = runner.run_experiment(scenario_name, variant_set_id, variant_set)
-            all_results.append(result)
+    results = []
+    for scenario_name, scenario_config in scenarios.items():
+        variant_set = scenario_config["variants_to_run"]
+        result = runner.run_tolerance_test(scenario_name, variant_set, approaches)
+        results.append(result)
 
     # Save results
     print("\n" + "=" * 80)
     print("Saving Results")
     print("=" * 80)
 
+    os.makedirs(config.results_dir, exist_ok=True)
     timestamp = time.strftime("%Y%m%d_%H%M%S")
-    results_path = os.path.join(benchmark_config.results_dir, f"results_{timestamp}.json")
-    save_results(all_results, results_path)
+    graph_suffix = "_cuda_graphs" if args.use_cuda_graphs else "_eager"
+    results_path = os.path.join(
+        config.results_dir,
+        f"tolerance_clean{graph_suffix}_{timestamp}.json"
+    )
+    save_results(results, results_path)
+    print(f"\nResults saved to: {results_path}")
 
     # Create plots
     print("\n" + "=" * 80)
     print("Creating Plots")
     print("=" * 80)
-    create_plots(all_results, benchmark_config.plots_dir)
+
+    config_name = os.path.splitext(os.path.basename(args.config))[0]
+    create_plots(results, config.plots_dir, config_name, approaches)
 
     # Print summary
     print("\n" + "=" * 80)
     print("Summary")
     print("=" * 80)
-    print(f"Total experiments run: {len(all_results)}")
+    print(f"Total tests run: {len(results)}")
+
+    # Count wins per approach
+    wins = {approach: 0 for approach in approaches}
+    for result in results:
+        valid_times = {k: v for k, v in result.approach_times.items() if v is not None}
+        if valid_times:
+            winner = min(valid_times, key=valid_times.get)
+            wins[winner] = wins.get(winner, 0) + 1
+
+    print("\nWinner Count by Approach:")
+    for approach in approaches:
+        count = wins.get(approach, 0)
+        pct = (count / len(results) * 100) if len(results) > 0 else 0
+        print(f"  {approach:35s}: {count:3d}/{len(results)} ({pct:5.1f}%)")
+
 
 if __name__ == "__main__":
     main()

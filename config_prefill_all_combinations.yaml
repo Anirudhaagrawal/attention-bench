@@ -1,0 +1,477 @@
+# FlashInfer Prefill Comprehensive Benchmark: All Combinations
+# Tests: Batch size 1, Q tokens {128,256,512,1k,2k,4k,8k} x KV tokens {=Q,1k,2k,4k,8k,16k,32k,64k}
+# ==========================================================================
+
+# Model Configuration (aligned with Llama 3-8B)
+model:
+  num_qo_heads: 32  # Llama 3-8B
+  num_kv_heads: 8   # Llama 3-8B (GQA 4:1 ratio)
+  head_dim: 128     # Llama 3-8B
+  page_size: 256
+  workspace_size: 536870912  # 512 MB
+
+# Profiling Configuration
+profiling:
+  num_warmup_iters: 5
+  num_active_iters: 50
+
+# Output Configuration
+output:
+  results_dir: "results"
+  plots_dir: "plots"
+
+
+# Approaches to benchmark
+approaches:
+  - flashinfer_mixed_fa2
+  - flashinfer_mixed_fa3
+  # - flashinfer_mixed_cudnn
+  - flashinfer_separated_fa2
+  - flashinfer_separated_fa3
+  - official_fa3
+
+# Variants - All Q and KV combinations
+variants:
+  # Q=128
+  prefill_q128_kv128:
+    q_tokens: 128
+    kv_tokens: 128
+    description: "Prefill (128 q, 128 kv)"
+  prefill_q128_kv1k:
+    q_tokens: 128
+    kv_tokens: 1024
+    description: "Prefill (128 q, 1K kv)"
+  prefill_q128_kv2k:
+    q_tokens: 128
+    kv_tokens: 2048
+    description: "Prefill (128 q, 2K kv)"
+  prefill_q128_kv4k:
+    q_tokens: 128
+    kv_tokens: 4096
+    description: "Prefill (128 q, 4K kv)"
+  prefill_q128_kv8k:
+    q_tokens: 128
+    kv_tokens: 8192
+    description: "Prefill (128 q, 8K kv)"
+  prefill_q128_kv16k:
+    q_tokens: 128
+    kv_tokens: 16384
+    description: "Prefill (128 q, 16K kv)"
+  prefill_q128_kv32k:
+    q_tokens: 128
+    kv_tokens: 32768
+    description: "Prefill (128 q, 32K kv)"
+  prefill_q128_kv64k:
+    q_tokens: 128
+    kv_tokens: 65536
+    description: "Prefill (128 q, 64K kv)"
+
+  # Q=256
+  prefill_q256_kv256:
+    q_tokens: 256
+    kv_tokens: 256
+    description: "Prefill (256 q, 256 kv)"
+  prefill_q256_kv1k:
+    q_tokens: 256
+    kv_tokens: 1024
+    description: "Prefill (256 q, 1K kv)"
+  prefill_q256_kv2k:
+    q_tokens: 256
+    kv_tokens: 2048
+    description: "Prefill (256 q, 2K kv)"
+  prefill_q256_kv4k:
+    q_tokens: 256
+    kv_tokens: 4096
+    description: "Prefill (256 q, 4K kv)"
+  prefill_q256_kv8k:
+    q_tokens: 256
+    kv_tokens: 8192
+    description: "Prefill (256 q, 8K kv)"
+  prefill_q256_kv16k:
+    q_tokens: 256
+    kv_tokens: 16384
+    description: "Prefill (256 q, 16K kv)"
+  prefill_q256_kv32k:
+    q_tokens: 256
+    kv_tokens: 32768
+    description: "Prefill (256 q, 32K kv)"
+  prefill_q256_kv64k:
+    q_tokens: 256
+    kv_tokens: 65536
+    description: "Prefill (256 q, 64K kv)"
+
+  # Q=512
+  prefill_q512_kv512:
+    q_tokens: 512
+    kv_tokens: 512
+    description: "Prefill (512 q, 512 kv)"
+  prefill_q512_kv1k:
+    q_tokens: 512
+    kv_tokens: 1024
+    description: "Prefill (512 q, 1K kv)"
+  prefill_q512_kv2k:
+    q_tokens: 512
+    kv_tokens: 2048
+    description: "Prefill (512 q, 2K kv)"
+  prefill_q512_kv4k:
+    q_tokens: 512
+    kv_tokens: 4096
+    description: "Prefill (512 q, 4K kv)"
+  prefill_q512_kv8k:
+    q_tokens: 512
+    kv_tokens: 8192
+    description: "Prefill (512 q, 8K kv)"
+  prefill_q512_kv16k:
+    q_tokens: 512
+    kv_tokens: 16384
+    description: "Prefill (512 q, 16K kv)"
+  prefill_q512_kv32k:
+    q_tokens: 512
+    kv_tokens: 32768
+    description: "Prefill (512 q, 32K kv)"
+  prefill_q512_kv64k:
+    q_tokens: 512
+    kv_tokens: 65536
+    description: "Prefill (512 q, 64K kv)"
+
+  # Q=1K
+  prefill_q1k_kv1k:
+    q_tokens: 1024
+    kv_tokens: 1024
+    description: "Prefill (1K q, 1K kv)"
+  prefill_q1k_kv2k:
+    q_tokens: 1024
+    kv_tokens: 2048
+    description: "Prefill (1K q, 2K kv)"
+  prefill_q1k_kv4k:
+    q_tokens: 1024
+    kv_tokens: 4096
+    description: "Prefill (1K q, 4K kv)"
+  prefill_q1k_kv8k:
+    q_tokens: 1024
+    kv_tokens: 8192
+    description: "Prefill (1K q, 8K kv)"
+  prefill_q1k_kv16k:
+    q_tokens: 1024
+    kv_tokens: 16384
+    description: "Prefill (1K q, 16K kv)"
+  prefill_q1k_kv32k:
+    q_tokens: 1024
+    kv_tokens: 32768
+    description: "Prefill (1K q, 32K kv)"
+  prefill_q1k_kv64k:
+    q_tokens: 1024
+    kv_tokens: 65536
+    description: "Prefill (1K q, 64K kv)"
+
+  # Q=2K
+  prefill_q2k_kv2k:
+    q_tokens: 2048
+    kv_tokens: 2048
+    description: "Prefill (2K q, 2K kv)"
+  prefill_q2k_kv4k:
+    q_tokens: 2048
+    kv_tokens: 4096
+    description: "Prefill (2K q, 4K kv)"
+  prefill_q2k_kv8k:
+    q_tokens: 2048
+    kv_tokens: 8192
+    description: "Prefill (2K q, 8K kv)"
+  prefill_q2k_kv16k:
+    q_tokens: 2048
+    kv_tokens: 16384
+    description: "Prefill (2K q, 16K kv)"
+  prefill_q2k_kv32k:
+    q_tokens: 2048
+    kv_tokens: 32768
+    description: "Prefill (2K q, 32K kv)"
+  prefill_q2k_kv64k:
+    q_tokens: 2048
+    kv_tokens: 65536
+    description: "Prefill (2K q, 64K kv)"
+
+  # Q=4K
+  prefill_q4k_kv4k:
+    q_tokens: 4096
+    kv_tokens: 4096
+    description: "Prefill (4K q, 4K kv)"
+  prefill_q4k_kv8k:
+    q_tokens: 4096
+    kv_tokens: 8192
+    description: "Prefill (4K q, 8K kv)"
+  prefill_q4k_kv16k:
+    q_tokens: 4096
+    kv_tokens: 16384
+    description: "Prefill (4K q, 16K kv)"
+  prefill_q4k_kv32k:
+    q_tokens: 4096
+    kv_tokens: 32768
+    description: "Prefill (4K q, 32K kv)"
+  prefill_q4k_kv64k:
+    q_tokens: 4096
+    kv_tokens: 65536
+    description: "Prefill (4K q, 64K kv)"
+
+  # Q=8K
+  prefill_q8k_kv8k:
+    q_tokens: 8192
+    kv_tokens: 8192
+    description: "Prefill (8K q, 8K kv)"
+  prefill_q8k_kv16k:
+    q_tokens: 8192
+    kv_tokens: 16384
+    description: "Prefill (8K q, 16K kv)"
+  prefill_q8k_kv32k:
+    q_tokens: 8192
+    kv_tokens: 32768
+    description: "Prefill (8K q, 32K kv)"
+  prefill_q8k_kv64k:
+    q_tokens: 8192
+    kv_tokens: 65536
+    description: "Prefill (8K q, 64K kv)"
+
+# Test Scenarios - All combinations (batch size = 1 for all)
+scenarios:
+  # Q=128 scenarios
+  prefill_b1_q128_kv128:
+    name: "Prefill B1 Q128 KV128"
+    description: "Batch 1, 128 Q, 128 KV"
+    variants_to_run:
+      - prefill_q128_kv128: 1
+  prefill_b1_q128_kv1k:
+    name: "Prefill B1 Q128 KV1K"
+    description: "Batch 1, 128 Q, 1K KV"
+    variants_to_run:
+      - prefill_q128_kv1k: 1
+  prefill_b1_q128_kv2k:
+    name: "Prefill B1 Q128 KV2K"
+    description: "Batch 1, 128 Q, 2K KV"
+    variants_to_run:
+      - prefill_q128_kv2k: 1
+  prefill_b1_q128_kv4k:
+    name: "Prefill B1 Q128 KV4K"
+    description: "Batch 1, 128 Q, 4K KV"
+    variants_to_run:
+      - prefill_q128_kv4k: 1
+  prefill_b1_q128_kv8k:
+    name: "Prefill B1 Q128 KV8K"
+    description: "Batch 1, 128 Q, 8K KV"
+    variants_to_run:
+      - prefill_q128_kv8k: 1
+  prefill_b1_q128_kv16k:
+    name: "Prefill B1 Q128 KV16K"
+    description: "Batch 1, 128 Q, 16K KV"
+    variants_to_run:
+      - prefill_q128_kv16k: 1
+  prefill_b1_q128_kv32k:
+    name: "Prefill B1 Q128 KV32K"
+    description: "Batch 1, 128 Q, 32K KV"
+    variants_to_run:
+      - prefill_q128_kv32k: 1
+  prefill_b1_q128_kv64k:
+    name: "Prefill B1 Q128 KV64K"
+    description: "Batch 1, 128 Q, 64K KV"
+    variants_to_run:
+      - prefill_q128_kv64k: 1
+
+  # Q=256 scenarios
+  prefill_b1_q256_kv256:
+    name: "Prefill B1 Q256 KV256"
+    description: "Batch 1, 256 Q, 256 KV"
+    variants_to_run:
+      - prefill_q256_kv256: 1
+  prefill_b1_q256_kv1k:
+    name: "Prefill B1 Q256 KV1K"
+    description: "Batch 1, 256 Q, 1K KV"
+    variants_to_run:
+      - prefill_q256_kv1k: 1
+  prefill_b1_q256_kv2k:
+    name: "Prefill B1 Q256 KV2K"
+    description: "Batch 1, 256 Q, 2K KV"
+    variants_to_run:
+      - prefill_q256_kv2k: 1
+  prefill_b1_q256_kv4k:
+    name: "Prefill B1 Q256 KV4K"
+    description: "Batch 1, 256 Q, 4K KV"
+    variants_to_run:
+      - prefill_q256_kv4k: 1
+  prefill_b1_q256_kv8k:
+    name: "Prefill B1 Q256 KV8K"
+    description: "Batch 1, 256 Q, 8K KV"
+    variants_to_run:
+      - prefill_q256_kv8k: 1
+  prefill_b1_q256_kv16k:
+    name: "Prefill B1 Q256 KV16K"
+    description: "Batch 1, 256 Q, 16K KV"
+    variants_to_run:
+      - prefill_q256_kv16k: 1
+  prefill_b1_q256_kv32k:
+    name: "Prefill B1 Q256 KV32K"
+    description: "Batch 1, 256 Q, 32K KV"
+    variants_to_run:
+      - prefill_q256_kv32k: 1
+  prefill_b1_q256_kv64k:
+    name: "Prefill B1 Q256 KV64K"
+    description: "Batch 1, 256 Q, 64K KV"
+    variants_to_run:
+      - prefill_q256_kv64k: 1
+
+  # Q=512 scenarios
+  prefill_b1_q512_kv512:
+    name: "Prefill B1 Q512 KV512"
+    description: "Batch 1, 512 Q, 512 KV"
+    variants_to_run:
+      - prefill_q512_kv512: 1
+  prefill_b1_q512_kv1k:
+    name: "Prefill B1 Q512 KV1K"
+    description: "Batch 1, 512 Q, 1K KV"
+    variants_to_run:
+      - prefill_q512_kv1k: 1
+  prefill_b1_q512_kv2k:
+    name: "Prefill B1 Q512 KV2K"
+    description: "Batch 1, 512 Q, 2K KV"
+    variants_to_run:
+      - prefill_q512_kv2k: 1
+  prefill_b1_q512_kv4k:
+    name: "Prefill B1 Q512 KV4K"
+    description: "Batch 1, 512 Q, 4K KV"
+    variants_to_run:
+      - prefill_q512_kv4k: 1
+  prefill_b1_q512_kv8k:
+    name: "Prefill B1 Q512 KV8K"
+    description: "Batch 1, 512 Q, 8K KV"
+    variants_to_run:
+      - prefill_q512_kv8k: 1
+  prefill_b1_q512_kv16k:
+    name: "Prefill B1 Q512 KV16K"
+    description: "Batch 1, 512 Q, 16K KV"
+    variants_to_run:
+      - prefill_q512_kv16k: 1
+  prefill_b1_q512_kv32k:
+    name: "Prefill B1 Q512 KV32K"
+    description: "Batch 1, 512 Q, 32K KV"
+    variants_to_run:
+      - prefill_q512_kv32k: 1
+  prefill_b1_q512_kv64k:
+    name: "Prefill B1 Q512 KV64K"
+    description: "Batch 1, 512 Q, 64K KV"
+    variants_to_run:
+      - prefill_q512_kv64k: 1
+
+  # Q=1K scenarios
+  prefill_b1_q1k_kv1k:
+    name: "Prefill B1 Q1K KV1K"
+    description: "Batch 1, 1K Q, 1K KV"
+    variants_to_run:
+      - prefill_q1k_kv1k: 1
+  prefill_b1_q1k_kv2k:
+    name: "Prefill B1 Q1K KV2K"
+    description: "Batch 1, 1K Q, 2K KV"
+    variants_to_run:
+      - prefill_q1k_kv2k: 1
+  prefill_b1_q1k_kv4k:
+    name: "Prefill B1 Q1K KV4K"
+    description: "Batch 1, 1K Q, 4K KV"
+    variants_to_run:
+      - prefill_q1k_kv4k: 1
+  prefill_b1_q1k_kv8k:
+    name: "Prefill B1 Q1K KV8K"
+    description: "Batch 1, 1K Q, 8K KV"
+    variants_to_run:
+      - prefill_q1k_kv8k: 1
+  prefill_b1_q1k_kv16k:
+    name: "Prefill B1 Q1K KV16K"
+    description: "Batch 1, 1K Q, 16K KV"
+    variants_to_run:
+      - prefill_q1k_kv16k: 1
+  prefill_b1_q1k_kv32k:
+    name: "Prefill B1 Q1K KV32K"
+    description: "Batch 1, 1K Q, 32K KV"
+    variants_to_run:
+      - prefill_q1k_kv32k: 1
+  prefill_b1_q1k_kv64k:
+    name: "Prefill B1 Q1K KV64K"
+    description: "Batch 1, 1K Q, 64K KV"
+    variants_to_run:
+      - prefill_q1k_kv64k: 1
+
+  # Q=2K scenarios
+  prefill_b1_q2k_kv2k:
+    name: "Prefill B1 Q2K KV2K"
+    description: "Batch 1, 2K Q, 2K KV"
+    variants_to_run:
+      - prefill_q2k_kv2k: 1
+  prefill_b1_q2k_kv4k:
+    name: "Prefill B1 Q2K KV4K"
+    description: "Batch 1, 2K Q, 4K KV"
+    variants_to_run:
+      - prefill_q2k_kv4k: 1
+  prefill_b1_q2k_kv8k:
+    name: "Prefill B1 Q2K KV8K"
+    description: "Batch 1, 2K Q, 8K KV"
+    variants_to_run:
+      - prefill_q2k_kv8k: 1
+  prefill_b1_q2k_kv16k:
+    name: "Prefill B1 Q2K KV16K"
+    description: "Batch 1, 2K Q, 16K KV"
+    variants_to_run:
+      - prefill_q2k_kv16k: 1
+  prefill_b1_q2k_kv32k:
+    name: "Prefill B1 Q2K KV32K"
+    description: "Batch 1, 2K Q, 32K KV"
+    variants_to_run:
+      - prefill_q2k_kv32k: 1
+  prefill_b1_q2k_kv64k:
+    name: "Prefill B1 Q2K KV64K"
+    description: "Batch 1, 2K Q, 64K KV"
+    variants_to_run:
+      - prefill_q2k_kv64k: 1
+
+  # Q=4K scenarios
+  prefill_b1_q4k_kv4k:
+    name: "Prefill B1 Q4K KV4K"
+    description: "Batch 1, 4K Q, 4K KV"
+    variants_to_run:
+      - prefill_q4k_kv4k: 1
+  prefill_b1_q4k_kv8k:
+    name: "Prefill B1 Q4K KV8K"
+    description: "Batch 1, 4K Q, 8K KV"
+    variants_to_run:
+      - prefill_q4k_kv8k: 1
+  prefill_b1_q4k_kv16k:
+    name: "Prefill B1 Q4K KV16K"
+    description: "Batch 1, 4K Q, 16K KV"
+    variants_to_run:
+      - prefill_q4k_kv16k: 1
+  prefill_b1_q4k_kv32k:
+    name: "Prefill B1 Q4K KV32K"
+    description: "Batch 1, 4K Q, 32K KV"
+    variants_to_run:
+      - prefill_q4k_kv32k: 1
+  prefill_b1_q4k_kv64k:
+    name: "Prefill B1 Q4K KV64K"
+    description: "Batch 1, 4K Q, 64K KV"
+    variants_to_run:
+      - prefill_q4k_kv64k: 1
+
+  # Q=8K scenarios
+  prefill_b1_q8k_kv8k:
+    name: "Prefill B1 Q8K KV8K"
+    description: "Batch 1, 8K Q, 8K KV"
+    variants_to_run:
+      - prefill_q8k_kv8k: 1
+  prefill_b1_q8k_kv16k:
+    name: "Prefill B1 Q8K KV16K"
+    description: "Batch 1, 8K Q, 16K KV"
+    variants_to_run:
+      - prefill_q8k_kv16k: 1
+  prefill_b1_q8k_kv32k:
+    name: "Prefill B1 Q8K KV32K"
+    description: "Batch 1, 8K Q, 32K KV"
+    variants_to_run:
+      - prefill_q8k_kv32k: 1
+  prefill_b1_q8k_kv64k:
+    name: "Prefill B1 Q8K KV64K"
+    description: "Batch 1, 8K Q, 64K KV"
+    variants_to_run:
+      - prefill_q8k_kv64k: 1
