@@ -14,14 +14,50 @@ We evaluated all attention kernel approaches across 2480 different workload scen
 
 ### Official FA3: Overall Strategy Performance
 
-Using FA3 for **all scenarios** (vs perfect per-scenario selection):
+**What happens when you use FA3 for all workloads?**
 
-- **Win Rate:** 65.4% (1621/2480 scenarios where FA3 is optimal)
-- **p50 (Median):** 1.000x slowdown (0.0% slower)
-- **p90:** 1.385x slowdown (38.5% slower)
-- **Average:** 1.131x slowdown (13.1% slower)
+We tested FA3 on 2,480 different scenarios and measured how it performs vs always picking the optimal kernel for each scenario.
 
-**Interpretation:** In 50% of scenarios, FA3 is optimal or near-optimal (≤0.0% slower). In 90% of scenarios, performance loss is ≤38.5%.
+#### Performance Distribution
+
+| FA3 Performance | Scenarios | % | What This Means |
+|-----------------|-----------|---|-----------------|
+| **1.0x (optimal)** | 1,621 | 65.4% | FA3 is the fastest choice - no penalty |
+| **1.0-1.1x** | 199 | 8.0% | Within 10% of optimal - negligible difference |
+| **1.1-1.2x** | 190 | 7.7% | 10-20% slower - minor but acceptable |
+| **1.2-1.5x** | 320 | 12.9% | 20-50% slower - moderate slowdown |
+| **1.5-2.0x** | 92 | 3.7% | 50-100% slower - significant slowdown |
+| **2.0x+** | 58 | 2.3% | >2x slower - severe cases (worst: 7.42x) |
+
+**Cumulative View:**
+- ✅ **73.4%** of scenarios: FA3 is optimal or near-optimal (≤10% slower)
+- ✅ **81.1%** of scenarios: Within 20% of optimal
+- ✅ **94.0%** of scenarios: Within 50% of optimal
+- ⚠️ **6.0%** of scenarios: >50% slower than optimal
+
+#### Summary Statistics
+
+- **Median (p50):** 1.000x
+  - *Why 1.0x?* Since FA3 wins 65% of scenarios, the middle scenario is one where FA3 is optimal
+  - *What it means:* More than half of all workloads run at optimal speed with FA3
+
+- **90th Percentile (p90):** 1.385x
+  - *What it means:* 90% of scenarios have ≤38.5% slowdown; only 10% are worse
+
+- **Average:** 1.131x (13.1% slower)
+  - *How calculated:* Mean slowdown across all 2,480 scenarios
+  - *What it means:* On average, using FA3 everywhere costs 13% performance vs perfect selection
+
+- **Worst Case:** 7.42x slower
+  - *When:* Small prefill (512 tokens) + large decode (32K KV, 1 batch)
+  - *Frequency:* Very rare (0.04% of scenarios)
+
+#### What the Numbers Mean
+
+- **"1.0x"** = FA3 is the fastest option (no slowdown)
+- **"1.2x"** = FA3 takes 20% longer than the optimal kernel
+- **"Median 1.0x"** = In a typical scenario, FA3 performs optimally
+- **"p90 1.385x"** = 9 out of 10 scenarios have ≤38.5% slowdown
 
 ### When FA3 Wins (65.4% of scenarios)
 
@@ -63,23 +99,43 @@ FA3 is suboptimal in 859 scenarios, but the performance penalty is typically sma
 
 ### Why Not BatchAttention?
 
-Some might consider using BatchAttention always, but this performs significantly worse:
+Some might consider using BatchAttention always, but this performs significantly worse.
 
-**Overall Strategy (using BatchAttention for everything):**
-- **Win Rate:** 22.4% (555/2478 scenarios)
-- **p50 (Median):** 1.434x slowdown (43.4% slower)
-- **p90:** 1.846x slowdown (84.6% slower)
-- **Average:** 1.413x slowdown (41.3% slower)
+**What happens when you use BatchAttention for all workloads?**
 
-**When BatchAttention wins (22.4% of scenarios):**
-- **p50:** 1.13x faster than runner-up
-- **p90:** 1.33x faster than runner-up
+We tested the same 2,480 scenarios using BatchAttention everywhere:
 
-BatchAttention severely underperforms on many workloads:
+#### Performance Distribution
 
-- **1 scenario** where BA is >3x slower
-- **110 scenarios** where BA is 2-3x slower
-- **Total: 111 scenarios** with >2x slowdown (4.5%)
+| BA Performance | Scenarios | % | What This Means |
+|----------------|-----------|---|-----------------|
+| **1.0x (optimal)** | 555 | 22.4% | BA is the fastest choice - no penalty |
+| **1.0-1.2x** | 371 | 15.0% | Within 20% of optimal - acceptable |
+| **1.2-1.5x** | 858 | 34.6% | 20-50% slower - moderate slowdown |
+| **1.5-2.0x** | 583 | 23.5% | 50-100% slower - significant slowdown |
+| **2.0x+** | 111 | 4.5% | >2x slower - severe cases (worst: 3.07x) |
+
+**Key Observations:**
+- ❌ Only **22.4%** of scenarios: BA is optimal
+- ❌ Only **37.4%** of scenarios: Within 20% of optimal
+- ⚠️ **62.6%** of scenarios: >20% slower than optimal
+- ⚠️ **28.0%** of scenarios: >50% slower than optimal
+
+#### Summary Statistics
+
+- **Median (p50):** 1.434x (43.4% slower)
+  - *Why so high?* BA only wins 22% of scenarios, so the median falls in the "loss" region
+  - *What it means:* A typical workload runs 43% slower with BA than optimal
+
+- **90th Percentile (p90):** 1.846x (84.6% slower)
+  - *What it means:* 90% of scenarios are within 85% of optimal; 10% are even worse
+
+- **Average:** 1.413x (41.3% slower)
+  - *Comparison:* **3.2x worse** than FA3's 13.1% average loss
+
+**When BatchAttention wins (22% of scenarios):**
+- Wins by 1.13-1.33x vs runner-up (smaller margin than FA3's 1.11-1.46x)
+- Primarily wins on: small prefills with large decode batches (≥64)
 
 ### Comparison Summary
 
