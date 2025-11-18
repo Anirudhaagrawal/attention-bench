@@ -1,937 +1,1401 @@
 Misclassifications
 ================================================================================
 
-Total misclassifications: 233/2352 (9.9%)
+Total misclassifications: 349/2463 (14.2%)
 
-1. mixed_dec_b1_kv1k_pref_q128_kv256
-   Actual: flashinfer_mixed_fa2
+1. decode_b1_kv8k
+   Actual: flashinfer_separated_fa3
    Predicted: flashinfer_batch_attention
 
-2. mixed_dec_b1_kv1k_pref_q256_kv512
+2. decode_b8_kv2k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+3. decode_b16_kv1k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+4. decode_b16_kv2k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+5. decode_b16_kv4k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+6. decode_b64_kv1k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+7. decode_batch_4
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+8. decode_batch_16
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+9. mixed_dec_b1_kv1k_pref_q128_kv256
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+10. mixed_dec_b1_kv1k_pref_q128_kv512
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+11. mixed_dec_b1_kv1k_pref_q128_kv1k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+12. mixed_dec_b1_kv1k_pref_q256_kv256
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+13. mixed_dec_b1_kv1k_pref_q256_kv512
+   Actual: flashinfer_mixed_fa3
+   Predicted: flashinfer_batch_attention
+
+14. mixed_dec_b1_kv1k_pref_q256_kv1k
    Actual: flashinfer_mixed_fa3
    Predicted: official_fa3
 
-3. mixed_dec_b1_kv1k_pref_q256_kv1k
+15. mixed_dec_b1_kv1k_pref_q256_kv2k
    Actual: flashinfer_mixed_fa3
    Predicted: official_fa3
 
-4. mixed_dec_b1_kv1k_pref_q256_kv2k
+16. mixed_dec_b1_kv2k_pref_q128_kv512
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+17. mixed_dec_b1_kv2k_pref_q128_kv1k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+18. mixed_dec_b1_kv2k_pref_q256_kv256
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+19. mixed_dec_b1_kv2k_pref_q256_kv512
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+20. mixed_dec_b1_kv2k_pref_q256_kv2k
    Actual: flashinfer_mixed_fa3
    Predicted: official_fa3
 
-5. mixed_dec_b1_kv2k_pref_q128_kv256
+21. mixed_dec_b1_kv2k_pref_q512_kv2k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+22. mixed_dec_b1_kv4k_pref_q128_kv1k
    Actual: official_fa3
    Predicted: flashinfer_batch_attention
 
-6. mixed_dec_b1_kv2k_pref_q256_kv256
-   Actual: flashinfer_mixed_fa2
+23. mixed_dec_b1_kv4k_pref_q256_kv1k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+24. mixed_dec_b1_kv4k_pref_q512_kv512
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+25. mixed_dec_b1_kv4k_pref_q512_kv1k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+26. mixed_dec_b1_kv4k_pref_q512_kv2k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+27. mixed_dec_b1_kv4k_pref_q512_kv4k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+28. mixed_dec_b1_kv4k_pref_q1k_kv1k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+29. mixed_dec_b1_kv8k_pref_q256_kv1k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+30. mixed_dec_b1_kv8k_pref_q256_kv2k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+31. mixed_dec_b1_kv8k_pref_q512_kv512
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+32. mixed_dec_b1_kv8k_pref_q512_kv1k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+33. mixed_dec_b1_kv8k_pref_q512_kv2k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+34. mixed_dec_b1_kv8k_pref_q512_kv4k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+35. mixed_dec_b1_kv8k_pref_q512_kv8k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+36. mixed_dec_b1_kv8k_pref_q1k_kv1k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+37. mixed_dec_b1_kv8k_pref_q1k_kv2k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+38. mixed_dec_b1_kv16k_pref_q128_kv2k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+39. mixed_dec_b1_kv16k_pref_q256_kv1k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+40. mixed_dec_b1_kv16k_pref_q256_kv2k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+41. mixed_dec_b1_kv16k_pref_q256_kv4k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+42. mixed_dec_b1_kv16k_pref_q512_kv512
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+43. mixed_dec_b1_kv16k_pref_q512_kv1k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+44. mixed_dec_b1_kv16k_pref_q512_kv2k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+45. mixed_dec_b1_kv16k_pref_q512_kv4k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+46. mixed_dec_b1_kv16k_pref_q512_kv8k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+47. mixed_dec_b1_kv16k_pref_q512_kv16k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+48. mixed_dec_b1_kv16k_pref_q1k_kv1k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+49. mixed_dec_b1_kv16k_pref_q1k_kv2k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+50. mixed_dec_b1_kv16k_pref_q1k_kv4k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+51. mixed_dec_b1_kv16k_pref_q2k_kv2k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+52. mixed_dec_b1_kv32k_pref_q128_kv2k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+53. mixed_dec_b1_kv32k_pref_q128_kv4k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+54. mixed_dec_b1_kv32k_pref_q128_kv8k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+55. mixed_dec_b1_kv32k_pref_q256_kv1k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+56. mixed_dec_b1_kv32k_pref_q256_kv2k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+57. mixed_dec_b1_kv32k_pref_q256_kv4k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+58. mixed_dec_b1_kv32k_pref_q256_kv8k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+59. mixed_dec_b1_kv32k_pref_q512_kv512
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+60. mixed_dec_b1_kv32k_pref_q512_kv1k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+61. mixed_dec_b1_kv32k_pref_q512_kv2k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+62. mixed_dec_b1_kv32k_pref_q512_kv4k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+63. mixed_dec_b1_kv32k_pref_q512_kv8k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+64. mixed_dec_b1_kv32k_pref_q512_kv16k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+65. mixed_dec_b1_kv32k_pref_q512_kv32k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+66. mixed_dec_b1_kv32k_pref_q1k_kv1k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+67. mixed_dec_b1_kv32k_pref_q1k_kv2k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+68. mixed_dec_b1_kv32k_pref_q1k_kv4k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+69. mixed_dec_b1_kv32k_pref_q1k_kv8k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+70. mixed_dec_b1_kv32k_pref_q1k_kv16k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+71. mixed_dec_b1_kv32k_pref_q2k_kv2k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+72. mixed_dec_b1_kv32k_pref_q2k_kv4k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+73. mixed_dec_b1_kv32k_pref_q4k_kv4k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+74. mixed_dec_b2_kv1k_pref_q128_kv512
+   Actual: official_fa3
    Predicted: flashinfer_batch_attention
 
-7. mixed_dec_b1_kv2k_pref_q256_kv2k
+75. mixed_dec_b2_kv1k_pref_q128_kv1k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+76. mixed_dec_b2_kv1k_pref_q256_kv256
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+77. mixed_dec_b2_kv1k_pref_q256_kv512
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+78. mixed_dec_b2_kv1k_pref_q256_kv1k
    Actual: flashinfer_mixed_fa3
    Predicted: official_fa3
 
-8. mixed_dec_b1_kv4k_pref_q128_kv512
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-9. mixed_dec_b1_kv4k_pref_q256_kv1k
-   Actual: flashinfer_separated_fa3
-   Predicted: official_fa3
-
-10. mixed_dec_b1_kv4k_pref_q512_kv512
-   Actual: flashinfer_separated_fa3
-   Predicted: official_fa3
-
-11. mixed_dec_b1_kv4k_pref_q512_kv1k
-   Actual: flashinfer_separated_fa3
-   Predicted: official_fa3
-
-12. mixed_dec_b1_kv4k_pref_q512_kv4k
-   Actual: flashinfer_separated_fa3
-   Predicted: official_fa3
-
-13. mixed_dec_b1_kv8k_pref_q128_kv512
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-14. mixed_dec_b1_kv8k_pref_q128_kv1k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-15. mixed_dec_b1_kv8k_pref_q256_kv512
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-16. mixed_dec_b1_kv8k_pref_q256_kv1k
-   Actual: flashinfer_separated_fa3
-   Predicted: official_fa3
-
-17. mixed_dec_b1_kv8k_pref_q256_kv2k
-   Actual: flashinfer_separated_fa3
-   Predicted: official_fa3
-
-18. mixed_dec_b1_kv8k_pref_q512_kv512
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-19. mixed_dec_b1_kv8k_pref_q512_kv1k
-   Actual: flashinfer_separated_fa3
-   Predicted: official_fa3
-
-20. mixed_dec_b1_kv8k_pref_q512_kv2k
-   Actual: flashinfer_separated_fa3
-   Predicted: official_fa3
-
-21. mixed_dec_b1_kv8k_pref_q512_kv4k
-   Actual: flashinfer_separated_fa3
-   Predicted: official_fa3
-
-22. mixed_dec_b1_kv8k_pref_q512_kv8k
-   Actual: flashinfer_separated_fa3
-   Predicted: official_fa3
-
-23. mixed_dec_b1_kv8k_pref_q1k_kv1k
-   Actual: flashinfer_separated_fa3
-   Predicted: official_fa3
-
-24. mixed_dec_b1_kv16k_pref_q128_kv4k
-   Actual: official_fa3
-   Predicted: flashinfer_batch_attention
-
-25. mixed_dec_b1_kv16k_pref_q256_kv4k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-26. mixed_dec_b1_kv16k_pref_q512_kv1k
-   Actual: flashinfer_separated_fa3
-   Predicted: flashinfer_batch_attention
-
-27. mixed_dec_b1_kv16k_pref_q512_kv2k
-   Actual: flashinfer_separated_fa3
-   Predicted: official_fa3
-
-28. mixed_dec_b1_kv16k_pref_q512_kv4k
-   Actual: flashinfer_separated_fa3
-   Predicted: official_fa3
-
-29. mixed_dec_b1_kv16k_pref_q512_kv8k
-   Actual: flashinfer_separated_fa3
-   Predicted: official_fa3
-
-30. mixed_dec_b1_kv16k_pref_q512_kv16k
-   Actual: flashinfer_separated_fa3
-   Predicted: official_fa3
-
-31. mixed_dec_b1_kv16k_pref_q1k_kv1k
-   Actual: flashinfer_separated_fa3
-   Predicted: official_fa3
-
-32. mixed_dec_b1_kv16k_pref_q1k_kv2k
-   Actual: flashinfer_separated_fa3
-   Predicted: official_fa3
-
-33. mixed_dec_b1_kv16k_pref_q1k_kv4k
-   Actual: flashinfer_separated_fa3
-   Predicted: official_fa3
-
-34. mixed_dec_b1_kv16k_pref_q2k_kv2k
-   Actual: flashinfer_separated_fa3
-   Predicted: official_fa3
-
-35. mixed_dec_b1_kv32k_pref_q256_kv4k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-36. mixed_dec_b1_kv32k_pref_q256_kv8k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-37. mixed_dec_b1_kv32k_pref_q512_kv2k
-   Actual: flashinfer_separated_fa3
-   Predicted: official_fa3
-
-38. mixed_dec_b1_kv32k_pref_q512_kv4k
-   Actual: flashinfer_separated_fa3
-   Predicted: official_fa3
-
-39. mixed_dec_b1_kv32k_pref_q512_kv8k
-   Actual: flashinfer_separated_fa3
-   Predicted: official_fa3
-
-40. mixed_dec_b1_kv32k_pref_q512_kv16k
-   Actual: flashinfer_separated_fa3
-   Predicted: official_fa3
-
-41. mixed_dec_b1_kv32k_pref_q512_kv32k
-   Actual: flashinfer_separated_fa3
-   Predicted: official_fa3
-
-42. mixed_dec_b1_kv32k_pref_q1k_kv1k
-   Actual: flashinfer_separated_fa3
-   Predicted: official_fa3
-
-43. mixed_dec_b1_kv32k_pref_q1k_kv2k
-   Actual: flashinfer_separated_fa3
-   Predicted: official_fa3
-
-44. mixed_dec_b1_kv32k_pref_q1k_kv4k
-   Actual: flashinfer_separated_fa3
-   Predicted: official_fa3
-
-45. mixed_dec_b1_kv32k_pref_q1k_kv8k
-   Actual: flashinfer_separated_fa3
-   Predicted: official_fa3
-
-46. mixed_dec_b1_kv32k_pref_q2k_kv2k
-   Actual: flashinfer_separated_fa3
-   Predicted: official_fa3
-
-47. mixed_dec_b1_kv32k_pref_q2k_kv4k
-   Actual: flashinfer_separated_fa3
-   Predicted: official_fa3
-
-48. mixed_dec_b2_kv1k_pref_q128_kv256
-   Actual: official_fa3
-   Predicted: flashinfer_batch_attention
-
-49. mixed_dec_b2_kv1k_pref_q256_kv256
-   Actual: flashinfer_mixed_fa2
-   Predicted: flashinfer_batch_attention
-
-50. mixed_dec_b2_kv1k_pref_q256_kv1k
+79. mixed_dec_b2_kv1k_pref_q256_kv2k
    Actual: flashinfer_mixed_fa3
    Predicted: official_fa3
 
-51. mixed_dec_b2_kv1k_pref_q256_kv2k
+80. mixed_dec_b2_kv2k_pref_q128_kv256
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+81. mixed_dec_b2_kv2k_pref_q128_kv512
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+82. mixed_dec_b2_kv2k_pref_q128_kv1k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+83. mixed_dec_b2_kv2k_pref_q256_kv512
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+84. mixed_dec_b2_kv2k_pref_q256_kv2k
    Actual: flashinfer_mixed_fa3
    Predicted: official_fa3
 
-52. mixed_dec_b2_kv2k_pref_q128_kv256
+85. mixed_dec_b2_kv4k_pref_q128_kv512
    Actual: official_fa3
    Predicted: flashinfer_batch_attention
 
-53. mixed_dec_b2_kv2k_pref_q256_kv2k
-   Actual: flashinfer_mixed_fa3
-   Predicted: official_fa3
+86. mixed_dec_b2_kv4k_pref_q128_kv1k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
 
-54. mixed_dec_b2_kv4k_pref_q256_kv512
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-55. mixed_dec_b2_kv4k_pref_q512_kv512
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-56. mixed_dec_b2_kv4k_pref_q512_kv1k
+87. mixed_dec_b2_kv4k_pref_q512_kv512
    Actual: flashinfer_separated_fa3
    Predicted: official_fa3
 
-57. mixed_dec_b2_kv4k_pref_q512_kv4k
+88. mixed_dec_b2_kv4k_pref_q512_kv1k
    Actual: flashinfer_separated_fa3
    Predicted: official_fa3
 
-58. mixed_dec_b2_kv8k_pref_q256_kv512
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-59. mixed_dec_b2_kv8k_pref_q256_kv1k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-60. mixed_dec_b2_kv8k_pref_q512_kv512
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-61. mixed_dec_b2_kv8k_pref_q512_kv1k
+89. mixed_dec_b2_kv4k_pref_q512_kv4k
    Actual: flashinfer_separated_fa3
    Predicted: official_fa3
 
-62. mixed_dec_b2_kv8k_pref_q512_kv2k
+90. mixed_dec_b2_kv8k_pref_q128_kv1k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+91. mixed_dec_b2_kv8k_pref_q256_kv1k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+92. mixed_dec_b2_kv8k_pref_q512_kv512
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+93. mixed_dec_b2_kv8k_pref_q512_kv1k
    Actual: flashinfer_separated_fa3
    Predicted: official_fa3
 
-63. mixed_dec_b2_kv8k_pref_q512_kv8k
+94. mixed_dec_b2_kv8k_pref_q512_kv2k
    Actual: flashinfer_separated_fa3
    Predicted: official_fa3
 
-64. mixed_dec_b2_kv8k_pref_q1k_kv1k
+95. mixed_dec_b2_kv8k_pref_q512_kv4k
    Actual: flashinfer_separated_fa3
    Predicted: official_fa3
 
-65. mixed_dec_b2_kv16k_pref_q128_kv1k
-   Actual: official_fa3
-   Predicted: flashinfer_batch_attention
-
-66. mixed_dec_b2_kv16k_pref_q128_kv2k
-   Actual: official_fa3
-   Predicted: flashinfer_batch_attention
-
-67. mixed_dec_b2_kv16k_pref_q128_kv4k
-   Actual: official_fa3
-   Predicted: flashinfer_batch_attention
-
-68. mixed_dec_b2_kv16k_pref_q512_kv2k
+96. mixed_dec_b2_kv8k_pref_q512_kv8k
    Actual: flashinfer_separated_fa3
    Predicted: official_fa3
 
-69. mixed_dec_b2_kv16k_pref_q512_kv4k
+97. mixed_dec_b2_kv8k_pref_q512_kv16k
    Actual: flashinfer_separated_fa3
    Predicted: official_fa3
 
-70. mixed_dec_b2_kv16k_pref_q512_kv16k
+98. mixed_dec_b2_kv8k_pref_q1k_kv1k
    Actual: flashinfer_separated_fa3
    Predicted: official_fa3
 
-71. mixed_dec_b2_kv16k_pref_q512_kv32k
+99. mixed_dec_b2_kv8k_pref_q1k_kv2k
    Actual: flashinfer_separated_fa3
    Predicted: official_fa3
 
-72. mixed_dec_b2_kv16k_pref_q1k_kv1k
+100. mixed_dec_b2_kv16k_pref_q256_kv1k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+101. mixed_dec_b2_kv16k_pref_q256_kv2k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+102. mixed_dec_b2_kv16k_pref_q512_kv512
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+103. mixed_dec_b2_kv16k_pref_q512_kv1k
    Actual: flashinfer_separated_fa3
    Predicted: official_fa3
 
-73. mixed_dec_b2_kv16k_pref_q1k_kv2k
+104. mixed_dec_b2_kv16k_pref_q512_kv2k
    Actual: flashinfer_separated_fa3
    Predicted: official_fa3
 
-74. mixed_dec_b2_kv16k_pref_q2k_kv2k
+105. mixed_dec_b2_kv16k_pref_q512_kv4k
    Actual: flashinfer_separated_fa3
    Predicted: official_fa3
 
-75. mixed_dec_b2_kv32k_pref_q128_kv4k
-   Actual: official_fa3
-   Predicted: flashinfer_batch_attention
-
-76. mixed_dec_b2_kv32k_pref_q256_kv4k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-77. mixed_dec_b2_kv32k_pref_q256_kv8k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-78. mixed_dec_b2_kv32k_pref_q512_kv2k
+106. mixed_dec_b2_kv16k_pref_q512_kv8k
    Actual: flashinfer_separated_fa3
    Predicted: official_fa3
 
-79. mixed_dec_b2_kv32k_pref_q512_kv4k
+107. mixed_dec_b2_kv16k_pref_q512_kv16k
    Actual: flashinfer_separated_fa3
    Predicted: official_fa3
 
-80. mixed_dec_b2_kv32k_pref_q512_kv8k
+108. mixed_dec_b2_kv16k_pref_q512_kv32k
    Actual: flashinfer_separated_fa3
    Predicted: official_fa3
 
-81. mixed_dec_b2_kv32k_pref_q512_kv16k
+109. mixed_dec_b2_kv16k_pref_q1k_kv1k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+110. mixed_dec_b2_kv16k_pref_q1k_kv2k
    Actual: flashinfer_separated_fa3
    Predicted: official_fa3
 
-82. mixed_dec_b2_kv32k_pref_q512_kv32k
+111. mixed_dec_b2_kv16k_pref_q1k_kv4k
    Actual: flashinfer_separated_fa3
    Predicted: official_fa3
 
-83. mixed_dec_b2_kv32k_pref_q1k_kv1k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-84. mixed_dec_b2_kv32k_pref_q1k_kv2k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-85. mixed_dec_b2_kv32k_pref_q1k_kv4k
+112. mixed_dec_b2_kv16k_pref_q1k_kv16k
    Actual: flashinfer_separated_fa3
    Predicted: official_fa3
 
-86. mixed_dec_b2_kv32k_pref_q1k_kv8k
+113. mixed_dec_b2_kv16k_pref_q2k_kv2k
    Actual: flashinfer_separated_fa3
    Predicted: official_fa3
 
-87. mixed_dec_b2_kv32k_pref_q2k_kv2k
+114. mixed_dec_b2_kv32k_pref_q128_kv2k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+115. mixed_dec_b2_kv32k_pref_q256_kv1k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+116. mixed_dec_b2_kv32k_pref_q256_kv2k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+117. mixed_dec_b2_kv32k_pref_q256_kv4k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+118. mixed_dec_b2_kv32k_pref_q256_kv8k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+119. mixed_dec_b2_kv32k_pref_q512_kv512
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+120. mixed_dec_b2_kv32k_pref_q512_kv1k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+121. mixed_dec_b2_kv32k_pref_q512_kv2k
    Actual: flashinfer_separated_fa3
    Predicted: official_fa3
 
-88. mixed_dec_b2_kv32k_pref_q2k_kv4k
+122. mixed_dec_b2_kv32k_pref_q512_kv4k
    Actual: flashinfer_separated_fa3
    Predicted: official_fa3
 
-89. mixed_dec_b4_kv1k_pref_q128_kv256
-   Actual: official_fa3
-   Predicted: flashinfer_batch_attention
-
-90. mixed_dec_b4_kv1k_pref_q256_kv256
-   Actual: official_fa3
-   Predicted: flashinfer_batch_attention
-
-91. mixed_dec_b4_kv2k_pref_q128_kv256
-   Actual: official_fa3
-   Predicted: flashinfer_batch_attention
-
-92. mixed_dec_b4_kv2k_pref_q128_kv1k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-93. mixed_dec_b4_kv4k_pref_q128_kv128
-   Actual: official_fa3
-   Predicted: flashinfer_batch_attention
-
-94. mixed_dec_b4_kv4k_pref_q512_kv512
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-95. mixed_dec_b4_kv8k_pref_q128_kv512
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-96. mixed_dec_b4_kv8k_pref_q256_kv256
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-97. mixed_dec_b4_kv8k_pref_q512_kv512
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-98. mixed_dec_b4_kv8k_pref_q512_kv1k
+123. mixed_dec_b2_kv32k_pref_q512_kv8k
    Actual: flashinfer_separated_fa3
    Predicted: official_fa3
 
-99. mixed_dec_b4_kv8k_pref_q512_kv2k
+124. mixed_dec_b2_kv32k_pref_q512_kv16k
    Actual: flashinfer_separated_fa3
    Predicted: official_fa3
 
-100. mixed_dec_b4_kv8k_pref_q1k_kv1k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-101. mixed_dec_b4_kv16k_pref_q128_kv1k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-102. mixed_dec_b4_kv16k_pref_q256_kv2k
-   Actual: official_fa3
-   Predicted: flashinfer_batch_attention
-
-103. mixed_dec_b4_kv16k_pref_q512_kv2k
+125. mixed_dec_b2_kv32k_pref_q512_kv32k
    Actual: flashinfer_separated_fa3
    Predicted: official_fa3
 
-104. mixed_dec_b4_kv16k_pref_q512_kv4k
+126. mixed_dec_b2_kv32k_pref_q512_kv64k
    Actual: flashinfer_separated_fa3
    Predicted: official_fa3
 
-105. mixed_dec_b4_kv16k_pref_q512_kv16k
+127. mixed_dec_b2_kv32k_pref_q1k_kv1k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+128. mixed_dec_b2_kv32k_pref_q1k_kv2k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+129. mixed_dec_b2_kv32k_pref_q1k_kv4k
    Actual: flashinfer_separated_fa3
    Predicted: official_fa3
 
-106. mixed_dec_b4_kv16k_pref_q1k_kv1k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-107. mixed_dec_b4_kv16k_pref_q1k_kv2k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-108. mixed_dec_b4_kv32k_pref_q256_kv4k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-109. mixed_dec_b4_kv32k_pref_q512_kv2k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-110. mixed_dec_b4_kv32k_pref_q512_kv4k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-111. mixed_dec_b4_kv32k_pref_q512_kv8k
+130. mixed_dec_b2_kv32k_pref_q1k_kv8k
    Actual: flashinfer_separated_fa3
    Predicted: official_fa3
 
-112. mixed_dec_b4_kv32k_pref_q512_kv32k
+131. mixed_dec_b2_kv32k_pref_q1k_kv16k
    Actual: flashinfer_separated_fa3
    Predicted: official_fa3
 
-113. mixed_dec_b4_kv32k_pref_q1k_kv1k
-   Actual: flashinfer_batch_attention
+132. mixed_dec_b2_kv32k_pref_q1k_kv32k
+   Actual: flashinfer_separated_fa3
    Predicted: official_fa3
 
-114. mixed_dec_b4_kv32k_pref_q1k_kv2k
-   Actual: flashinfer_batch_attention
+133. mixed_dec_b2_kv32k_pref_q2k_kv2k
+   Actual: flashinfer_separated_fa3
    Predicted: official_fa3
 
-115. mixed_dec_b4_kv32k_pref_q1k_kv4k
-   Actual: flashinfer_batch_attention
+134. mixed_dec_b2_kv32k_pref_q2k_kv4k
+   Actual: flashinfer_separated_fa3
    Predicted: official_fa3
 
-116. mixed_dec_b4_kv32k_pref_q2k_kv2k
-   Actual: flashinfer_batch_attention
+135. mixed_dec_b2_kv32k_pref_q4k_kv4k
+   Actual: flashinfer_separated_fa3
    Predicted: official_fa3
 
-117. mixed_dec_b8_kv1k_pref_q128_kv512
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-118. mixed_dec_b8_kv1k_pref_q128_kv1k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-119. mixed_dec_b8_kv2k_pref_q128_kv128
+136. mixed_dec_b4_kv1k_pref_q128_kv256
    Actual: official_fa3
    Predicted: flashinfer_batch_attention
 
-120. mixed_dec_b8_kv2k_pref_q128_kv512
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-121. mixed_dec_b8_kv4k_pref_q128_kv1k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-122. mixed_dec_b8_kv4k_pref_q256_kv512
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-123. mixed_dec_b8_kv8k_pref_q256_kv256
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-124. mixed_dec_b8_kv8k_pref_q512_kv512
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-125. mixed_dec_b8_kv8k_pref_q512_kv1k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-126. mixed_dec_b8_kv16k_pref_q256_kv256
+137. mixed_dec_b4_kv1k_pref_q128_kv512
    Actual: official_fa3
    Predicted: flashinfer_batch_attention
 
-127. mixed_dec_b8_kv16k_pref_q256_kv512
+138. mixed_dec_b4_kv1k_pref_q128_kv1k
    Actual: official_fa3
    Predicted: flashinfer_batch_attention
 
-128. mixed_dec_b8_kv16k_pref_q256_kv1k
+139. mixed_dec_b4_kv1k_pref_q256_kv512
    Actual: official_fa3
    Predicted: flashinfer_batch_attention
 
-129. mixed_dec_b8_kv16k_pref_q256_kv2k
+140. mixed_dec_b4_kv2k_pref_q128_kv512
    Actual: official_fa3
    Predicted: flashinfer_batch_attention
 
-130. mixed_dec_b8_kv16k_pref_q512_kv2k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-131. mixed_dec_b8_kv16k_pref_q1k_kv1k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-132. mixed_dec_b8_kv32k_pref_q256_kv1k
+141. mixed_dec_b4_kv2k_pref_q256_kv512
    Actual: official_fa3
    Predicted: flashinfer_batch_attention
 
-133. mixed_dec_b8_kv32k_pref_q256_kv2k
+142. mixed_dec_b4_kv4k_pref_q128_kv128
    Actual: official_fa3
    Predicted: flashinfer_batch_attention
 
-134. mixed_dec_b8_kv32k_pref_q512_kv2k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-135. mixed_dec_b8_kv32k_pref_q512_kv4k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-136. mixed_dec_b8_kv32k_pref_q1k_kv1k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-137. mixed_dec_b8_kv32k_pref_q1k_kv2k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-138. mixed_dec_b16_kv1k_pref_q128_kv128
+143. mixed_dec_b4_kv4k_pref_q128_kv512
    Actual: official_fa3
    Predicted: flashinfer_batch_attention
 
-139. mixed_dec_b16_kv1k_pref_q128_kv256
+144. mixed_dec_b4_kv4k_pref_q128_kv1k
    Actual: official_fa3
    Predicted: flashinfer_batch_attention
 
-140. mixed_dec_b16_kv1k_pref_q128_kv1k
-   Actual: flashinfer_mixed_fa2
-   Predicted: official_fa3
-
-141. mixed_dec_b16_kv1k_pref_q256_kv512
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-142. mixed_dec_b16_kv1k_pref_q256_kv1k
-   Actual: flashinfer_mixed_fa2
-   Predicted: official_fa3
-
-143. mixed_dec_b16_kv2k_pref_q128_kv2k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-144. mixed_dec_b16_kv2k_pref_q256_kv256
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-145. mixed_dec_b16_kv2k_pref_q256_kv512
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-146. mixed_dec_b16_kv2k_pref_q256_kv2k
-   Actual: flashinfer_mixed_fa2
-   Predicted: official_fa3
-
-147. mixed_dec_b16_kv4k_pref_q128_kv4k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-148. mixed_dec_b16_kv4k_pref_q256_kv256
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-149. mixed_dec_b16_kv4k_pref_q256_kv512
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-150. mixed_dec_b16_kv4k_pref_q256_kv4k
-   Actual: flashinfer_mixed_fa2
-   Predicted: official_fa3
-
-151. mixed_dec_b16_kv8k_pref_q128_kv8k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-152. mixed_dec_b16_kv8k_pref_q256_kv256
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-153. mixed_dec_b16_kv8k_pref_q256_kv1k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-154. mixed_dec_b16_kv16k_pref_q128_kv128
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-155. mixed_dec_b16_kv16k_pref_q128_kv512
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-156. mixed_dec_b16_kv16k_pref_q256_kv256
+145. mixed_dec_b4_kv4k_pref_q256_kv512
    Actual: official_fa3
    Predicted: flashinfer_batch_attention
 
-157. mixed_dec_b16_kv16k_pref_q256_kv512
-   Actual: official_fa3
-   Predicted: flashinfer_batch_attention
-
-158. mixed_dec_b16_kv16k_pref_q256_kv2k
-   Actual: official_fa3
-   Predicted: flashinfer_batch_attention
-
-159. mixed_dec_b16_kv16k_pref_q512_kv512
-   Actual: official_fa3
-   Predicted: flashinfer_batch_attention
-
-160. mixed_dec_b16_kv16k_pref_q512_kv1k
-   Actual: official_fa3
-   Predicted: flashinfer_batch_attention
-
-161. mixed_dec_b16_kv32k_pref_q128_kv128
+146. mixed_dec_b4_kv4k_pref_q512_kv512
    Actual: flashinfer_batch_attention
    Predicted: official_fa3
 
-162. mixed_dec_b16_kv32k_pref_q128_kv256
+147. mixed_dec_b4_kv4k_pref_q512_kv1k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+148. mixed_dec_b4_kv4k_pref_q512_kv4k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+149. mixed_dec_b4_kv8k_pref_q128_kv128
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+150. mixed_dec_b4_kv8k_pref_q128_kv256
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+151. mixed_dec_b4_kv8k_pref_q128_kv1k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+152. mixed_dec_b4_kv8k_pref_q512_kv512
    Actual: flashinfer_batch_attention
    Predicted: official_fa3
 
-163. mixed_dec_b16_kv32k_pref_q128_kv512
+153. mixed_dec_b4_kv8k_pref_q512_kv1k
    Actual: flashinfer_batch_attention
    Predicted: official_fa3
 
-164. mixed_dec_b16_kv32k_pref_q256_kv2k
+154. mixed_dec_b4_kv8k_pref_q512_kv2k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+155. mixed_dec_b4_kv8k_pref_q512_kv8k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+156. mixed_dec_b4_kv8k_pref_q512_kv16k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+157. mixed_dec_b4_kv8k_pref_q1k_kv1k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+158. mixed_dec_b4_kv16k_pref_q128_kv128
    Actual: official_fa3
    Predicted: flashinfer_batch_attention
 
-165. mixed_dec_b32_kv1k_pref_q256_kv1k
+159. mixed_dec_b4_kv16k_pref_q128_kv256
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+160. mixed_dec_b4_kv16k_pref_q128_kv512
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+161. mixed_dec_b4_kv16k_pref_q256_kv1k
    Actual: flashinfer_batch_attention
    Predicted: official_fa3
 
-166. mixed_dec_b32_kv2k_pref_q128_kv1k
-   Actual: official_fa3
-   Predicted: flashinfer_batch_attention
-
-167. mixed_dec_b32_kv2k_pref_q128_kv2k
+162. mixed_dec_b4_kv16k_pref_q256_kv2k
    Actual: flashinfer_batch_attention
    Predicted: official_fa3
 
-168. mixed_dec_b32_kv2k_pref_q256_kv1k
+163. mixed_dec_b4_kv16k_pref_q512_kv512
    Actual: flashinfer_batch_attention
    Predicted: official_fa3
 
-169. mixed_dec_b32_kv4k_pref_q128_kv512
-   Actual: official_fa3
-   Predicted: flashinfer_batch_attention
-
-170. mixed_dec_b32_kv4k_pref_q256_kv1k
+164. mixed_dec_b4_kv16k_pref_q512_kv1k
    Actual: flashinfer_batch_attention
    Predicted: official_fa3
 
-171. mixed_dec_b32_kv8k_pref_q128_kv1k
-   Actual: official_fa3
-   Predicted: flashinfer_batch_attention
+165. mixed_dec_b4_kv16k_pref_q512_kv2k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
 
-172. mixed_dec_b32_kv8k_pref_q256_kv1k
+166. mixed_dec_b4_kv16k_pref_q512_kv4k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+167. mixed_dec_b4_kv16k_pref_q512_kv16k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+168. mixed_dec_b4_kv16k_pref_q512_kv32k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+169. mixed_dec_b4_kv16k_pref_q1k_kv1k
    Actual: flashinfer_batch_attention
    Predicted: official_fa3
 
-173. mixed_dec_b32_kv16k_pref_q128_kv2k
-   Actual: official_fa3
-   Predicted: flashinfer_batch_attention
-
-174. mixed_dec_b32_kv16k_pref_q128_kv4k
-   Actual: official_fa3
-   Predicted: flashinfer_batch_attention
-
-175. mixed_dec_b32_kv16k_pref_q256_kv2k
-   Actual: official_fa3
-   Predicted: flashinfer_batch_attention
-
-176. mixed_dec_b32_kv32k_pref_q128_kv8k
-   Actual: official_fa3
-   Predicted: flashinfer_batch_attention
-
-177. mixed_dec_b32_kv32k_pref_q128_kv16k
-   Actual: official_fa3
-   Predicted: flashinfer_batch_attention
-
-178. mixed_dec_b32_kv32k_pref_q512_kv8k
+170. mixed_dec_b4_kv16k_pref_q1k_kv2k
    Actual: flashinfer_batch_attention
    Predicted: official_fa3
 
-179. mixed_dec_b32_kv32k_pref_q1k_kv4k
-   Actual: flashinfer_batch_attention
+171. mixed_dec_b4_kv16k_pref_q1k_kv16k
+   Actual: flashinfer_separated_fa3
    Predicted: official_fa3
 
-180. mixed_dec_b32_kv32k_pref_q2k_kv2k
-   Actual: flashinfer_batch_attention
+172. mixed_dec_b4_kv16k_pref_q2k_kv2k
+   Actual: flashinfer_separated_fa3
    Predicted: official_fa3
 
-181. mixed_dec_b64_kv1k_pref_q128_kv512
-   Actual: flashinfer_mixed_fa2
-   Predicted: flashinfer_batch_attention
-
-182. mixed_dec_b64_kv1k_pref_q256_kv4k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-183. mixed_dec_b64_kv1k_pref_q512_kv512
+173. mixed_dec_b4_kv32k_pref_q128_kv128
    Actual: official_fa3
    Predicted: flashinfer_batch_attention
 
-184. mixed_dec_b64_kv1k_pref_q512_kv1k
+174. mixed_dec_b4_kv32k_pref_q128_kv256
    Actual: official_fa3
    Predicted: flashinfer_batch_attention
 
-185. mixed_dec_b64_kv2k_pref_q128_kv1k
-   Actual: flashinfer_mixed_fa2
+175. mixed_dec_b4_kv32k_pref_q128_kv512
+   Actual: official_fa3
    Predicted: flashinfer_batch_attention
 
-186. mixed_dec_b64_kv2k_pref_q128_kv2k
-   Actual: flashinfer_mixed_fa2
+176. mixed_dec_b4_kv32k_pref_q128_kv1k
+   Actual: official_fa3
    Predicted: flashinfer_batch_attention
 
-187. mixed_dec_b64_kv2k_pref_q256_kv4k
+177. mixed_dec_b4_kv32k_pref_q256_kv1k
    Actual: flashinfer_batch_attention
    Predicted: official_fa3
 
-188. mixed_dec_b64_kv2k_pref_q512_kv512
+178. mixed_dec_b4_kv32k_pref_q256_kv2k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+179. mixed_dec_b4_kv32k_pref_q256_kv4k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+180. mixed_dec_b4_kv32k_pref_q512_kv512
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+181. mixed_dec_b4_kv32k_pref_q512_kv1k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+182. mixed_dec_b4_kv32k_pref_q512_kv2k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+183. mixed_dec_b4_kv32k_pref_q512_kv4k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+184. mixed_dec_b4_kv32k_pref_q512_kv8k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+185. mixed_dec_b4_kv32k_pref_q512_kv32k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+186. mixed_dec_b4_kv32k_pref_q512_kv64k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+187. mixed_dec_b4_kv32k_pref_q1k_kv1k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+188. mixed_dec_b4_kv32k_pref_q1k_kv2k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+189. mixed_dec_b4_kv32k_pref_q1k_kv4k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+190. mixed_dec_b4_kv32k_pref_q1k_kv32k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+191. mixed_dec_b4_kv32k_pref_q2k_kv2k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+192. mixed_dec_b4_kv32k_pref_q2k_kv4k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+193. mixed_dec_b8_kv2k_pref_q128_kv128
    Actual: official_fa3
    Predicted: flashinfer_batch_attention
 
-189. mixed_dec_b64_kv2k_pref_q512_kv1k
+194. mixed_dec_b8_kv2k_pref_q256_kv512
    Actual: official_fa3
    Predicted: flashinfer_batch_attention
 
-190. mixed_dec_b64_kv4k_pref_q128_kv2k
-   Actual: flashinfer_mixed_fa2
+195. mixed_dec_b8_kv4k_pref_q128_kv128
+   Actual: official_fa3
    Predicted: flashinfer_batch_attention
 
-191. mixed_dec_b64_kv4k_pref_q128_kv4k
+196. mixed_dec_b8_kv4k_pref_q128_kv256
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+197. mixed_dec_b8_kv4k_pref_q512_kv512
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+198. mixed_dec_b8_kv8k_pref_q128_kv128
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+199. mixed_dec_b8_kv8k_pref_q128_kv256
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+200. mixed_dec_b8_kv8k_pref_q128_kv512
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+201. mixed_dec_b8_kv8k_pref_q128_kv1k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+202. mixed_dec_b8_kv8k_pref_q256_kv512
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+203. mixed_dec_b8_kv8k_pref_q512_kv512
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+204. mixed_dec_b8_kv8k_pref_q512_kv1k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+205. mixed_dec_b8_kv16k_pref_q128_kv128
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+206. mixed_dec_b8_kv16k_pref_q128_kv256
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+207. mixed_dec_b8_kv16k_pref_q128_kv512
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+208. mixed_dec_b8_kv16k_pref_q128_kv1k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+209. mixed_dec_b8_kv16k_pref_q512_kv512
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+210. mixed_dec_b8_kv16k_pref_q512_kv1k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+211. mixed_dec_b8_kv16k_pref_q512_kv2k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+212. mixed_dec_b8_kv16k_pref_q1k_kv1k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+213. mixed_dec_b8_kv32k_pref_q128_kv512
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+214. mixed_dec_b8_kv32k_pref_q128_kv1k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+215. mixed_dec_b8_kv32k_pref_q256_kv1k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+216. mixed_dec_b8_kv32k_pref_q512_kv2k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+217. mixed_dec_b8_kv32k_pref_q512_kv4k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+218. mixed_dec_b8_kv32k_pref_q512_kv32k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+219. mixed_dec_b8_kv32k_pref_q1k_kv2k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+220. mixed_dec_b8_kv32k_pref_q1k_kv32k
+   Actual: flashinfer_separated_fa3
+   Predicted: official_fa3
+
+221. mixed_dec_b8_kv32k_pref_q2k_kv2k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+222. mixed_dec_b16_kv1k_pref_q128_kv512
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+223. mixed_dec_b16_kv1k_pref_q128_kv1k
    Actual: flashinfer_mixed_fa2
    Predicted: flashinfer_batch_attention
 
-192. mixed_dec_b64_kv4k_pref_q512_kv512
+224. mixed_dec_b16_kv1k_pref_q256_kv1k
+   Actual: flashinfer_mixed_fa2
+   Predicted: official_fa3
+
+225. mixed_dec_b16_kv2k_pref_q128_kv128
    Actual: official_fa3
    Predicted: flashinfer_batch_attention
 
-193. mixed_dec_b64_kv4k_pref_q512_kv1k
+226. mixed_dec_b16_kv2k_pref_q128_kv256
    Actual: official_fa3
    Predicted: flashinfer_batch_attention
 
-194. mixed_dec_b64_kv8k_pref_q128_kv2k
-   Actual: flashinfer_mixed_fa2
-   Predicted: flashinfer_batch_attention
-
-195. mixed_dec_b64_kv8k_pref_q128_kv4k
-   Actual: flashinfer_mixed_fa2
-   Predicted: flashinfer_batch_attention
-
-196. mixed_dec_b64_kv8k_pref_q128_kv8k
-   Actual: flashinfer_mixed_fa2
-   Predicted: official_fa3
-
-197. mixed_dec_b64_kv8k_pref_q256_kv4k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-198. mixed_dec_b64_kv8k_pref_q512_kv1k
+227. mixed_dec_b16_kv2k_pref_q128_kv512
    Actual: official_fa3
    Predicted: flashinfer_batch_attention
 
-199. mixed_dec_b64_kv16k_pref_q128_kv8k
-   Actual: flashinfer_mixed_fa2
-   Predicted: flashinfer_batch_attention
-
-200. mixed_dec_b64_kv16k_pref_q128_kv16k
-   Actual: flashinfer_mixed_fa2
-   Predicted: flashinfer_batch_attention
-
-201. mixed_dec_b64_kv16k_pref_q512_kv8k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-202. mixed_dec_b64_kv16k_pref_q1k_kv4k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-203. mixed_dec_b64_kv16k_pref_q2k_kv2k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-204. mixed_dec_b64_kv32k_pref_q128_kv16k
-   Actual: flashinfer_mixed_fa2
-   Predicted: flashinfer_batch_attention
-
-205. mixed_dec_b64_kv32k_pref_q128_kv32k
-   Actual: flashinfer_mixed_fa2
-   Predicted: flashinfer_batch_attention
-
-206. mixed_dec_b64_kv32k_pref_q256_kv32k
+228. mixed_dec_b16_kv2k_pref_q128_kv1k
    Actual: official_fa3
    Predicted: flashinfer_batch_attention
 
-207. mixed_dec_b64_kv32k_pref_q256_kv64k
+229. mixed_dec_b16_kv2k_pref_q128_kv2k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+230. mixed_dec_b16_kv2k_pref_q256_kv2k
+   Actual: flashinfer_mixed_fa2
+   Predicted: official_fa3
+
+231. mixed_dec_b16_kv4k_pref_q128_kv128
    Actual: official_fa3
    Predicted: flashinfer_batch_attention
 
-208. mixed_dec_b64_kv32k_pref_q512_kv32k
+232. mixed_dec_b16_kv4k_pref_q128_kv256
    Actual: official_fa3
    Predicted: flashinfer_batch_attention
 
-209. mixed_dec_b64_kv32k_pref_q1k_kv16k
+233. mixed_dec_b16_kv4k_pref_q128_kv512
    Actual: official_fa3
    Predicted: flashinfer_batch_attention
 
-210. mixed_dec_b128_kv1k_pref_q128_kv8k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-211. mixed_dec_b128_kv1k_pref_q128_kv16k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-212. mixed_dec_b128_kv1k_pref_q256_kv4k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-213. mixed_dec_b128_kv1k_pref_q256_kv8k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-214. mixed_dec_b128_kv2k_pref_q128_kv8k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-215. mixed_dec_b128_kv2k_pref_q256_kv4k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-216. mixed_dec_b128_kv4k_pref_q128_kv4k
-   Actual: flashinfer_mixed_fa2
-   Predicted: flashinfer_batch_attention
-
-217. mixed_dec_b128_kv4k_pref_q128_kv8k
-   Actual: flashinfer_mixed_fa2
-   Predicted: official_fa3
-
-218. mixed_dec_b128_kv4k_pref_q256_kv4k
-   Actual: flashinfer_mixed_fa2
-   Predicted: official_fa3
-
-219. mixed_dec_b128_kv4k_pref_q256_kv8k
-   Actual: flashinfer_mixed_fa2
-   Predicted: official_fa3
-
-220. mixed_dec_b128_kv4k_pref_q1k_kv1k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-221. mixed_dec_b128_kv8k_pref_q128_kv8k
-   Actual: flashinfer_mixed_fa2
-   Predicted: flashinfer_batch_attention
-
-222. mixed_dec_b128_kv8k_pref_q128_kv16k
-   Actual: flashinfer_mixed_fa2
-   Predicted: flashinfer_batch_attention
-
-223. mixed_dec_b128_kv8k_pref_q256_kv8k
-   Actual: flashinfer_mixed_fa2
-   Predicted: flashinfer_batch_attention
-
-224. mixed_dec_b128_kv8k_pref_q256_kv16k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-225. mixed_dec_b128_kv8k_pref_q512_kv8k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-226. mixed_dec_b128_kv8k_pref_q1k_kv4k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-227. mixed_dec_b128_kv8k_pref_q2k_kv2k
-   Actual: flashinfer_batch_attention
-   Predicted: official_fa3
-
-228. mixed_dec_b128_kv16k_pref_q256_kv64k
+234. mixed_dec_b16_kv4k_pref_q128_kv1k
    Actual: official_fa3
    Predicted: flashinfer_batch_attention
 
-229. mixed_dec_b128_kv32k_pref_q512_kv64k
+235. mixed_dec_b16_kv4k_pref_q256_kv4k
+   Actual: flashinfer_mixed_fa2
+   Predicted: official_fa3
+
+236. mixed_dec_b16_kv8k_pref_q128_kv128
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+237. mixed_dec_b16_kv8k_pref_q128_kv256
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+238. mixed_dec_b16_kv8k_pref_q128_kv512
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+239. mixed_dec_b16_kv8k_pref_q128_kv1k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+240. mixed_dec_b16_kv8k_pref_q128_kv8k
    Actual: flashinfer_batch_attention
    Predicted: official_fa3
 
-230. mixed_dec_b128_kv32k_pref_q1k_kv32k
+241. mixed_dec_b16_kv8k_pref_q256_kv1k
    Actual: flashinfer_batch_attention
    Predicted: official_fa3
 
-231. mixed_dec_b128_kv32k_pref_q2k_kv16k
+242. mixed_dec_b16_kv16k_pref_q128_kv1k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+243. mixed_dec_b16_kv16k_pref_q512_kv1k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+244. mixed_dec_b16_kv16k_pref_q1k_kv1k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+245. mixed_dec_b16_kv32k_pref_q128_kv32k
    Actual: flashinfer_batch_attention
    Predicted: official_fa3
 
-232. mixed_dec_b128_kv32k_pref_q4k_kv8k
+246. mixed_dec_b16_kv32k_pref_q256_kv2k
    Actual: flashinfer_batch_attention
    Predicted: official_fa3
 
-233. mixed_dec_b128_kv32k_pref_q8k_kv8k
+247. mixed_dec_b32_kv1k_pref_q256_kv1k
    Actual: flashinfer_batch_attention
    Predicted: official_fa3
+
+248. mixed_dec_b32_kv2k_pref_q128_kv1k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+249. mixed_dec_b32_kv2k_pref_q256_kv1k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+250. mixed_dec_b32_kv4k_pref_q256_kv1k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+251. mixed_dec_b32_kv8k_pref_q128_kv1k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+252. mixed_dec_b32_kv8k_pref_q256_kv2k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+253. mixed_dec_b32_kv8k_pref_q1k_kv1k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+254. mixed_dec_b32_kv16k_pref_q256_kv2k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+255. mixed_dec_b32_kv32k_pref_q128_kv8k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+256. mixed_dec_b32_kv32k_pref_q128_kv16k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+257. mixed_dec_b32_kv32k_pref_q128_kv32k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+258. mixed_dec_b32_kv32k_pref_q128_kv64k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+259. mixed_dec_b32_kv32k_pref_q256_kv16k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+260. mixed_dec_b32_kv32k_pref_q256_kv32k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+261. mixed_dec_b32_kv32k_pref_q256_kv64k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+262. mixed_dec_b32_kv32k_pref_q512_kv16k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+263. mixed_dec_b32_kv32k_pref_q512_kv32k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+264. mixed_dec_b32_kv32k_pref_q1k_kv8k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+265. mixed_dec_b32_kv32k_pref_q1k_kv16k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+266. mixed_dec_b32_kv32k_pref_q2k_kv8k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+267. mixed_dec_b64_kv1k_pref_q128_kv512
+   Actual: flashinfer_mixed_fa2
+   Predicted: flashinfer_batch_attention
+
+268. mixed_dec_b64_kv1k_pref_q128_kv2k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+269. mixed_dec_b64_kv1k_pref_q128_kv4k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+270. mixed_dec_b64_kv1k_pref_q256_kv1k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+271. mixed_dec_b64_kv1k_pref_q256_kv2k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+272. mixed_dec_b64_kv1k_pref_q256_kv4k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+273. mixed_dec_b64_kv2k_pref_q128_kv1k
+   Actual: flashinfer_mixed_fa2
+   Predicted: flashinfer_batch_attention
+
+274. mixed_dec_b64_kv2k_pref_q128_kv2k
+   Actual: flashinfer_mixed_fa2
+   Predicted: official_fa3
+
+275. mixed_dec_b64_kv2k_pref_q256_kv1k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+276. mixed_dec_b64_kv2k_pref_q256_kv2k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+277. mixed_dec_b64_kv2k_pref_q256_kv4k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+278. mixed_dec_b64_kv2k_pref_q512_kv512
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+279. mixed_dec_b64_kv4k_pref_q128_kv2k
+   Actual: flashinfer_mixed_fa2
+   Predicted: official_fa3
+
+280. mixed_dec_b64_kv4k_pref_q128_kv4k
+   Actual: flashinfer_mixed_fa2
+   Predicted: official_fa3
+
+281. mixed_dec_b64_kv4k_pref_q256_kv2k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+282. mixed_dec_b64_kv4k_pref_q1k_kv1k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+283. mixed_dec_b64_kv8k_pref_q128_kv2k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+284. mixed_dec_b64_kv8k_pref_q128_kv4k
+   Actual: flashinfer_mixed_fa2
+   Predicted: official_fa3
+
+285. mixed_dec_b64_kv8k_pref_q128_kv8k
+   Actual: flashinfer_mixed_fa2
+   Predicted: official_fa3
+
+286. mixed_dec_b64_kv8k_pref_q256_kv2k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+287. mixed_dec_b64_kv8k_pref_q256_kv4k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+288. mixed_dec_b64_kv16k_pref_q128_kv4k
+   Actual: flashinfer_mixed_fa2
+   Predicted: flashinfer_batch_attention
+
+289. mixed_dec_b64_kv16k_pref_q128_kv8k
+   Actual: flashinfer_mixed_fa2
+   Predicted: flashinfer_batch_attention
+
+290. mixed_dec_b64_kv16k_pref_q128_kv16k
+   Actual: flashinfer_mixed_fa2
+   Predicted: flashinfer_batch_attention
+
+291. mixed_dec_b64_kv16k_pref_q128_kv32k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+292. mixed_dec_b64_kv16k_pref_q128_kv64k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+293. mixed_dec_b64_kv16k_pref_q256_kv16k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+294. mixed_dec_b64_kv16k_pref_q256_kv32k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+295. mixed_dec_b64_kv16k_pref_q256_kv64k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+296. mixed_dec_b64_kv16k_pref_q512_kv16k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+297. mixed_dec_b64_kv16k_pref_q512_kv32k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+298. mixed_dec_b64_kv16k_pref_q1k_kv8k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+299. mixed_dec_b64_kv16k_pref_q1k_kv16k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+300. mixed_dec_b64_kv16k_pref_q2k_kv8k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+301. mixed_dec_b64_kv32k_pref_q128_kv16k
+   Actual: flashinfer_mixed_fa2
+   Predicted: flashinfer_batch_attention
+
+302. mixed_dec_b64_kv32k_pref_q128_kv64k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+303. mixed_dec_b64_kv32k_pref_q256_kv32k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+304. mixed_dec_b64_kv32k_pref_q512_kv32k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+305. mixed_dec_b128_kv1k_pref_q128_kv2k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+306. mixed_dec_b128_kv1k_pref_q128_kv4k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+307. mixed_dec_b128_kv1k_pref_q128_kv8k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+308. mixed_dec_b128_kv1k_pref_q128_kv16k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+309. mixed_dec_b128_kv1k_pref_q256_kv1k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+310. mixed_dec_b128_kv1k_pref_q256_kv2k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+311. mixed_dec_b128_kv1k_pref_q256_kv4k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+312. mixed_dec_b128_kv1k_pref_q256_kv8k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+313. mixed_dec_b128_kv1k_pref_q512_kv512
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+314. mixed_dec_b128_kv1k_pref_q512_kv1k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+315. mixed_dec_b128_kv2k_pref_q128_kv2k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+316. mixed_dec_b128_kv2k_pref_q128_kv4k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+317. mixed_dec_b128_kv2k_pref_q256_kv2k
+   Actual: flashinfer_mixed_fa2
+   Predicted: official_fa3
+
+318. mixed_dec_b128_kv2k_pref_q256_kv4k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+319. mixed_dec_b128_kv2k_pref_q256_kv8k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+320. mixed_dec_b128_kv2k_pref_q256_kv16k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+321. mixed_dec_b128_kv2k_pref_q1k_kv1k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+322. mixed_dec_b128_kv4k_pref_q128_kv2k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+323. mixed_dec_b128_kv4k_pref_q128_kv4k
+   Actual: flashinfer_mixed_fa2
+   Predicted: official_fa3
+
+324. mixed_dec_b128_kv4k_pref_q128_kv8k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+325. mixed_dec_b128_kv4k_pref_q256_kv2k
+   Actual: flashinfer_mixed_fa2
+   Predicted: official_fa3
+
+326. mixed_dec_b128_kv4k_pref_q256_kv4k
+   Actual: flashinfer_mixed_fa2
+   Predicted: official_fa3
+
+327. mixed_dec_b128_kv4k_pref_q256_kv8k
+   Actual: flashinfer_mixed_fa2
+   Predicted: official_fa3
+
+328. mixed_dec_b128_kv4k_pref_q512_kv2k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+329. mixed_dec_b128_kv4k_pref_q1k_kv2k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+330. mixed_dec_b128_kv8k_pref_q128_kv8k
+   Actual: flashinfer_mixed_fa2
+   Predicted: flashinfer_batch_attention
+
+331. mixed_dec_b128_kv8k_pref_q128_kv32k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+332. mixed_dec_b128_kv8k_pref_q128_kv64k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+333. mixed_dec_b128_kv8k_pref_q256_kv8k
+   Actual: flashinfer_mixed_fa2
+   Predicted: flashinfer_batch_attention
+
+334. mixed_dec_b128_kv8k_pref_q256_kv32k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+335. mixed_dec_b128_kv8k_pref_q256_kv64k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+336. mixed_dec_b128_kv8k_pref_q512_kv8k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+337. mixed_dec_b128_kv8k_pref_q512_kv16k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+338. mixed_dec_b128_kv8k_pref_q512_kv32k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+339. mixed_dec_b128_kv8k_pref_q1k_kv8k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+340. mixed_dec_b128_kv8k_pref_q1k_kv16k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+341. mixed_dec_b128_kv8k_pref_q2k_kv8k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+342. mixed_dec_b128_kv8k_pref_q4k_kv4k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+343. mixed_dec_b128_kv16k_pref_q256_kv64k
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
+
+344. mixed_dec_b128_kv32k_pref_q512_kv64k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+345. mixed_dec_b128_kv32k_pref_q1k_kv32k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+346. mixed_dec_b128_kv32k_pref_q2k_kv16k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+347. mixed_dec_b128_kv32k_pref_q4k_kv8k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+348. mixed_dec_b128_kv32k_pref_q8k_kv8k
+   Actual: flashinfer_batch_attention
+   Predicted: official_fa3
+
+349. prefill_b1_q256_kv256
+   Actual: official_fa3
+   Predicted: flashinfer_batch_attention
 

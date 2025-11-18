@@ -105,7 +105,11 @@ def extract_features_from_result(result):
             prefill_kv = 2048  # Reasonable default
 
     # Extract decode information
-    if scenario_name.startswith('decode_b'):
+    if scenario_name.startswith('decode_batch_'):
+        # Format: decode_batch_128_kv16k
+        parts = scenario_name.split('_')
+        decode_batch = int(parts[2])
+    elif scenario_name.startswith('decode_b'):
         # Format: decode_b128_kv16k
         parts = scenario_name.split('_')
         decode_batch = int(parts[1][1:])
@@ -208,42 +212,48 @@ def get_winner(result, tolerance=0.10):
 
 def load_data():
     """Load and prepare data for training."""
-    results_file = 'results/tolerance_clean_eager_20251117_152225.json'
+    import glob
+
+    results_files = sorted(glob.glob('results/tolerance_clean_eager_*.json'))
 
     X = []  # Features
     y = []  # Labels (winner)
     scenarios = []
 
-    print(f"Loading data from: {results_file}")
-    with open(results_file, 'r') as f:
-        data = json.load(f)
+    print(f"Loading data from {len(results_files)} files:")
+    for results_file in results_files:
+        print(f"  - {results_file}")
 
-    for result in data:
-        features = extract_features_from_result(result)
+    for results_file in results_files:
+        with open(results_file, 'r') as f:
+            data = json.load(f)
 
-        # Skip unparseable scenarios
-        if features['prefill_q'] < 0:
-            continue
+        for result in data:
+            features = extract_features_from_result(result)
 
-        winner = get_winner(result)
+            # Skip unparseable scenarios
+            if features['prefill_q'] < 0:
+                continue
 
-        if winner is None:
-            continue
+            winner = get_winner(result)
 
-        # Feature vector: 7 features (4 base + 3 derived token counts)
-        feature_vec = [
-            features['prefill_q'],              # Query tokens per prefill request
-            features['prefill_kv'],             # KV cache length for prefill
-            features['decode_kv'],              # KV cache length for decode
-            features['decode_batch'],           # Number of decode requests
-            features['total_decode_tokens'],    # Total decode tokens (decode_batch * decode_kv)
-            features['total_prefill_tokens'],   # Total prefill tokens (prefill_q * prefill_kv)
-            features['num_prefills'],           # Number of prefill requests
-        ]
+            if winner is None:
+                continue
 
-        X.append(feature_vec)
-        y.append(winner)
-        scenarios.append(result['scenario_name'])
+            # Feature vector: 7 features (4 base + 3 derived token counts)
+            feature_vec = [
+                features['prefill_q'],              # Query tokens per prefill request
+                features['prefill_kv'],             # KV cache length for prefill
+                features['decode_kv'],              # KV cache length for decode
+                features['decode_batch'],           # Number of decode requests
+                features['total_decode_tokens'],    # Total decode tokens (decode_batch * decode_kv)
+                features['total_prefill_tokens'],   # Total prefill tokens (prefill_q * prefill_kv)
+                features['num_prefills'],           # Number of prefill requests
+            ]
+
+            X.append(feature_vec)
+            y.append(winner)
+            scenarios.append(result['scenario_name'])
 
     return np.array(X), np.array(y), scenarios
 
