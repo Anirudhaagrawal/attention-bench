@@ -12,24 +12,32 @@ We evaluated all attention kernel approaches across 2480 different workload scen
 
 **TL;DR:** Always use Official FA3. It provides the best overall performance with minimal complexity.
 
-### Official FA3 Performance
+### Official FA3: Overall Strategy Performance
 
-- **Win Rate:** 65.4% (1621/2480 scenarios)
-- **Average Slowdown:** 1.131x vs optimal
-- **Performance Loss:** 13.1% on average
-- **Median Slowdown:** 1.000x
-- **Worst Case:** 7.42x slower (very rare)
+Using FA3 for **all scenarios** (vs perfect per-scenario selection):
 
-#### When FA3 Wins
+- **Win Rate:** 65.4% (1621/2480 scenarios where FA3 is optimal)
+- **p50 (Median):** 1.000x slowdown (0.0% slower)
+- **p90:** 1.385x slowdown (38.5% slower)
+- **Average:** 1.131x slowdown (13.1% slower)
 
-Official FA3 is optimal in 65.4% of scenarios, particularly:
+**Interpretation:** In 50% of scenarios, FA3 is optimal or near-optimal (≤0.0% slower). In 90% of scenarios, performance loss is ≤38.5%.
+
+### When FA3 Wins (65.4% of scenarios)
+
+FA3 is optimal in these scenarios:
 - Large prefill workloads (prefill_kv > 1536)
 - Mixed decode/prefill workloads
 - Most decode-only scenarios with small-to-medium batch sizes
 
-#### When FA3 Loses
+**Performance margin when FA3 wins:**
+- **p50:** 1.11x faster than runner-up
+- **p90:** 1.46x faster than runner-up
+- **Average:** 1.19x faster than runner-up
 
-FA3 is suboptimal in 859 scenarios (34.6%), but the performance penalty is typically small:
+### When FA3 Loses (859 scenarios, 34.6%)
+
+FA3 is suboptimal in 859 scenarios, but the performance penalty is typically small:
 
 | Slowdown Range | Count | Percentage |
 |----------------|-------|------------|
@@ -38,6 +46,13 @@ FA3 is suboptimal in 859 scenarios (34.6%), but the performance penalty is typic
 | 1.2-1.5x (moderate) | 320 | 12.9% |
 | 1.5-2.0x (significant) | 92 | 3.7% |
 | 2.0x+ (severe) | 58 | 2.3% |
+
+**Alternative winners when FA3 loses:**
+- flashinfer_batch_attention: 555 scenarios (64.6% of FA3 losses)
+- flashinfer_mixed_fa2: 157 scenarios (18.3% of FA3 losses)
+- flashinfer_separated_fa3: 134 scenarios (15.6% of FA3 losses)
+- flashinfer_mixed_fa3: 10 scenarios (1.2% of FA3 losses)
+- flashinfer_separated_fa2: 3 scenarios (0.3% of FA3 losses)
 
 **Worst-case scenarios** where FA3 is slowest:
 1. `mixed_dec_b1_kv32k_pref_q512_kv512`: 7.42x slower (winner: flashinfer_batch_attention)
@@ -50,10 +65,15 @@ FA3 is suboptimal in 859 scenarios (34.6%), but the performance penalty is typic
 
 Some might consider using BatchAttention always, but this performs significantly worse:
 
+**Overall Strategy (using BatchAttention for everything):**
 - **Win Rate:** 22.4% (555/2478 scenarios)
-- **Average Slowdown:** 1.413x vs optimal
-- **Performance Loss:** 41.3% on average
-- **Worst Case:** 3.07x slower
+- **p50 (Median):** 1.434x slowdown (43.4% slower)
+- **p90:** 1.846x slowdown (84.6% slower)
+- **Average:** 1.413x slowdown (41.3% slower)
+
+**When BatchAttention wins (22.4% of scenarios):**
+- **p50:** 1.13x faster than runner-up
+- **p90:** 1.33x faster than runner-up
 
 BatchAttention severely underperforms on many workloads:
 
@@ -63,11 +83,11 @@ BatchAttention severely underperforms on many workloads:
 
 ### Comparison Summary
 
-| Strategy | Win Rate | Avg Slowdown | Perf Loss | Complexity |
-|----------|----------|--------------|-----------|------------|
-| **Official FA3 (Recommended)** | **65.4%** | **1.131x** | **13.1%** | **Simple** |
-| BatchAttention | 22.4% | 1.413x | 41.3% | Simple |
-| Perfect Selection | 100.0% | 1.000x | 0.0% | Complex |
+| Strategy | Win Rate | p50 Slowdown | p90 Slowdown | Avg Perf Loss | Complexity |
+|----------|----------|--------------|--------------|---------------|------------|
+| **Official FA3 (Recommended)** | **65.4%** | **1.000x** | **1.385x** | **13.1%** | **Simple** |
+| BatchAttention | 22.4% | 1.434x | 1.846x | 41.3% | Simple |
+| Perfect Selection | 100.0% | 1.000x | 1.000x | 0.0% | Complex |
 
 ### Decision Tree Results
 
@@ -78,7 +98,7 @@ We also trained a decision tree classifier to predict the optimal approach:
 
 While the decision tree achieves reasonable accuracy, the complexity is not justified:
 - Requires 3-level decision tree with multiple feature checks
-- Only improves from 13.1% to ~8-9% performance loss
+- Only improves from 13.1% to ~8-9% average performance loss
 - Adds implementation complexity and maintenance burden
 
 **For production systems, we recommend simply using Official FA3 for all workloads.**
@@ -87,8 +107,7 @@ While the decision tree achieves reasonable accuracy, the complexity is not just
 
 - `decision_tree_results/` - Decision tree analysis and visualizations
 - `learn_decision_tree.py` - Decision tree training script
-- `find_working_heuristics.py` - Heuristic analysis script
-- `generate_readme_analysis.py` - Performance analysis generator
+- `archived/analysis_scripts/` - Analysis scripts used to generate this report
 
 ## Usage
 
