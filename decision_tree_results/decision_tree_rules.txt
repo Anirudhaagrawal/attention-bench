@@ -1,0 +1,85 @@
+Decision Tree Rules
+================================================================================
+
+|--- total_prefill_tokens <= 786432.00
+|   |--- decode_batch <= 24.00
+|   |   |--- decode_kv <= 12288.00
+|   |   |   |--- prefill_kv <= 384.00
+|   |   |   |   |--- total_decode_tokens <= 24576.00
+|   |   |   |   |   |--- class: flashinfer_batch_attention
+|   |   |   |   |--- total_decode_tokens >  24576.00
+|   |   |   |   |   |--- class: official_fa3
+|   |   |   |--- prefill_kv >  384.00
+|   |   |   |   |--- prefill_kv <= 768.00
+|   |   |   |   |   |--- class: official_fa3
+|   |   |   |   |--- prefill_kv >  768.00
+|   |   |   |   |   |--- class: official_fa3
+|   |   |--- decode_kv >  12288.00
+|   |   |   |--- decode_batch <= 3.00
+|   |   |   |   |--- prefill_kv <= 1536.00
+|   |   |   |   |   |--- class: flashinfer_batch_attention
+|   |   |   |   |--- prefill_kv >  1536.00
+|   |   |   |   |   |--- class: flashinfer_batch_attention
+|   |   |   |--- decode_batch >  3.00
+|   |   |   |   |--- prefill_q <= 192.00
+|   |   |   |   |   |--- class: official_fa3
+|   |   |   |   |--- prefill_q >  192.00
+|   |   |   |   |   |--- class: flashinfer_batch_attention
+|   |--- decode_batch >  24.00
+|   |   |--- total_prefill_tokens <= 196608.00
+|   |   |   |--- prefill_kv <= 768.00
+|   |   |   |   |--- total_decode_tokens <= 196608.00
+|   |   |   |   |   |--- class: flashinfer_batch_attention
+|   |   |   |   |--- total_decode_tokens >  196608.00
+|   |   |   |   |   |--- class: flashinfer_batch_attention
+|   |   |   |--- prefill_kv >  768.00
+|   |   |   |   |--- class: flashinfer_batch_attention
+|   |   |--- total_prefill_tokens >  196608.00
+|   |   |   |--- decode_batch <= 48.00
+|   |   |   |   |--- decode_kv <= 12288.00
+|   |   |   |   |   |--- class: official_fa3
+|   |   |   |   |--- decode_kv >  12288.00
+|   |   |   |   |   |--- class: flashinfer_batch_attention
+|   |   |   |--- decode_batch >  48.00
+|   |   |   |   |--- decode_batch <= 96.00
+|   |   |   |   |   |--- class: flashinfer_batch_attention
+|   |   |   |   |--- decode_batch >  96.00
+|   |   |   |   |   |--- class: flashinfer_batch_attention
+|--- total_prefill_tokens >  786432.00
+|   |--- total_decode_tokens <= 1572864.00
+|   |   |--- total_prefill_tokens <= 3145728.00
+|   |   |   |--- total_decode_tokens <= 786432.00
+|   |   |   |   |--- decode_kv <= 12288.00
+|   |   |   |   |   |--- class: official_fa3
+|   |   |   |   |--- decode_kv >  12288.00
+|   |   |   |   |   |--- class: official_fa3
+|   |   |   |--- total_decode_tokens >  786432.00
+|   |   |   |   |--- prefill_q <= 384.00
+|   |   |   |   |   |--- class: flashinfer_batch_attention
+|   |   |   |   |--- prefill_q >  384.00
+|   |   |   |   |   |--- class: flashinfer_batch_attention
+|   |   |--- total_prefill_tokens >  3145728.00
+|   |   |   |--- decode_kv <= 24576.00
+|   |   |   |   |--- total_decode_tokens <= 786432.00
+|   |   |   |   |   |--- class: official_fa3
+|   |   |   |   |--- total_decode_tokens >  786432.00
+|   |   |   |   |   |--- class: official_fa3
+|   |   |   |--- decode_kv >  24576.00
+|   |   |   |   |--- total_prefill_tokens <= 12582912.00
+|   |   |   |   |   |--- class: official_fa3
+|   |   |   |   |--- total_prefill_tokens >  12582912.00
+|   |   |   |   |   |--- class: official_fa3
+|   |--- total_decode_tokens >  1572864.00
+|   |   |--- total_prefill_tokens <= 25165824.00
+|   |   |   |--- prefill_kv <= 24576.00
+|   |   |   |   |--- prefill_kv <= 12288.00
+|   |   |   |   |   |--- class: flashinfer_batch_attention
+|   |   |   |   |--- prefill_kv >  12288.00
+|   |   |   |   |   |--- class: flashinfer_batch_attention
+|   |   |   |--- prefill_kv >  24576.00
+|   |   |   |   |--- class: flashinfer_batch_attention
+|   |   |--- total_prefill_tokens >  25165824.00
+|   |   |   |--- total_decode_tokens <= 3145728.00
+|   |   |   |   |--- class: official_fa3
+|   |   |   |--- total_decode_tokens >  3145728.00
+|   |   |   |   |--- class: official_fa3

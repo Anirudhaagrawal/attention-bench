@@ -6,5 +6,6 @@ from .base import AttentionApproach, ApproachRegistry, APPROACHES, BenchmarkCont
 # Import all approach implementations to trigger registration
 from . import flashinfer_approaches
 from . import official_fa3_approaches
+from . import cudnn_approaches
 
 __all__ = ["AttentionApproach", "ApproachRegistry", "APPROACHES", "BenchmarkContext"]

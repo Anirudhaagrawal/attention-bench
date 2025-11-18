@@ -7,7 +7,7 @@ model:
   num_qo_heads: 32  # Llama 3-8B
   num_kv_heads: 8   # Llama 3-8B (GQA 4:1 ratio)
   head_dim: 128     # Llama 3-8B
-  page_size: 256    # Default 256 for fair comparison with Official FA3
+  page_size: 16    # Default 256 for fair comparison with Official FA3
   workspace_size: 536870912  # 512 MB
 
 # Profiling Configuration
@@ -22,6 +22,7 @@ output:
 
 # Approaches to benchmark (can be overridden with --approaches flag)
 approaches:
+  - flashinfer_batch_attention
   - flashinfer_mixed_fa2
   - flashinfer_mixed_fa3
   - flashinfer_separated_fa2
@@ -32,7 +33,7 @@ approaches:
 # Optional: Override page_size for specific approaches
 # approach_overrides:
 #   flashinfer_mixed_fa2:
-#     page_size: 256
+#     page_size: 16
 
 # Variants
 variants:

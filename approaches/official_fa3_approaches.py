@@ -2,13 +2,15 @@
 """Official FlashAttention-3 approach implementations."""
 
 from typing import Callable
+import sys
 import torch
 
 from .base import APPROACHES, BenchmarkContext
 
-# Try to import official FA3
+# Import FA3 from hopper directory
 try:
-    from flash_attn import flash_attn_with_kvcache
+    sys.path.insert(0, '/scratch/anirudha/flash-attention/hopper')
+    from flash_attn_interface import flash_attn_with_kvcache
     HAS_OFFICIAL_FA3 = True
 except ImportError:
     HAS_OFFICIAL_FA3 = False
@@ -16,83 +18,62 @@ except ImportError:
 
 @APPROACHES.register
 class OfficialFA3:
-    """Official FlashAttention-3 with paged KV cache."""
+    """Official FlashAttention-3 with paged KV cache (Hopper optimized)."""
 
     name = "official_fa3"
-    default_page_size = 256  # Official FA3 requires page_size divisible by 256
+    default_page_size = 16  # Using 256 for now
 
     def setup(self, ctx: BenchmarkContext) -> Callable[[], torch.Tensor]:
-        """Setup Official FA3 and return callable for benchmarking."""
+        """Setup Official FA3 with varlen format (NO padding!) using shared data from context."""
         if not HAS_OFFICIAL_FA3:
             raise RuntimeError(
                 "Official FlashAttention-3 not available. Install with: pip install flash-attn"
             )
 
-        if ctx.page_size % 256 != 0:
-            raise ValueError(
-                f"Official FA3 requires page_size divisible by 256, got {ctx.page_size}"
-            )
-
         batch_size = len(ctx.q_lengths)
+        max_seqlen_q = max(ctx.q_lengths)
 
-        # Calculate number of pages per sequence
+        # Split interleaved KV cache format into separate K and V tensors
+        # Context format: (num_pages, 2, page_size, num_kv_heads, head_dim)
+        # Official FA3 expects: (num_pages, page_size, num_kv_heads, head_dim)
+        k_cache = ctx.kv_cache[:, 0]  # Extract K
+        v_cache = ctx.kv_cache[:, 1]  # Extract V
+
+        # Convert FlashInfer's (indptr + indices) format to page_table format
+        # FlashInfer uses: kv_page_indptr[i]:kv_page_indptr[i+1] gives indices for batch i
+        # Official FA3 expects: page_table[i, :] is a padded array of page indices
         num_pages_per_seq = [
-            (kv + ctx.page_size - 1) // ctx.page_size for kv in ctx.kv_lengths
+            (ctx.kv_page_indptr[i+1] - ctx.kv_page_indptr[i]).item()
+            for i in range(batch_size)
         ]
-        total_pages = sum(num_pages_per_seq)
-
-        # Create paged KV cache (Official FA3 layout: different from FlashInfer)
-        # Official FA3: (num_pages, page_size, num_kv_heads, head_dim)
-        # FlashInfer: (num_pages, 2, num_kv_heads, page_size, head_dim)
-        k_cache = torch.randn(
-            total_pages, ctx.page_size, ctx.num_kv_heads, ctx.head_dim,
-            dtype=torch.float16, device="cuda"
-        )
-        v_cache = torch.randn(
-            total_pages, ctx.page_size, ctx.num_kv_heads, ctx.head_dim,
-            dtype=torch.float16, device="cuda"
-        )
-
-        # Create block table (batch_size, max_num_pages)
         max_num_pages = max(num_pages_per_seq)
-        block_table = torch.zeros(
+
+        page_table = torch.zeros(
             batch_size, max_num_pages, dtype=torch.int32, device="cuda"
         )
 
-        page_offset = 0
-        for i, num_pages in enumerate(num_pages_per_seq):
-            block_table[i, :num_pages] = torch.arange(
-                page_offset, page_offset + num_pages, dtype=torch.int32
-            )
-            page_offset += num_pages
+        # Fill page_table using ctx.kv_page_indices (same data as FlashInfer!)
+        for i in range(batch_size):
+            start = ctx.kv_page_indptr[i].item()
+            end = ctx.kv_page_indptr[i+1].item()
+            num_pages = end - start
+            page_table[i, :num_pages] = ctx.kv_page_indices[start:end]
 
-        # Cache sequence lengths
-        cache_seqlens = torch.tensor(
-            ctx.kv_lengths, dtype=torch.int32, device="cuda"
-        )
+        # Cache sequence lengths (actual KV lengths)
+        cache_seqlens = torch.tensor(ctx.kv_lengths, dtype=torch.int32, device="cuda")
 
-        # Reshape Q from (total_q_tokens, num_qo_heads, head_dim)
-        # to (batch_size, max_seqlen_q, num_qo_heads, head_dim)
-        max_q_len = max(ctx.q_lengths)
-        q_batched = torch.zeros(
-            batch_size, max_q_len, ctx.num_qo_heads, ctx.head_dim,
-            dtype=torch.float16, device="cuda"
-        )
-
-        q_offset = 0
-        for i, q_len in enumerate(ctx.q_lengths):
-            q_batched[i, :q_len] = ctx.q[q_offset : q_offset + q_len]
-            q_offset += q_len
-
-        # Return callable that runs one iteration
+        # FA3: Use varlen mode (NO padding!)
         def run_iteration():
             return flash_attn_with_kvcache(
-                q_batched,
-                k_cache,
-                v_cache,
+                q=ctx.q,                      # Packed format (NO padding!)
+                k_cache=k_cache,
+                v_cache=v_cache,
                 cache_seqlens=cache_seqlens,
-                block_table=block_table,
+                page_table=page_table,
+                cu_seqlens_q=ctx.qo_indptr,   # Enables varlen mode!
+                max_seqlen_q=max_seqlen_q,
                 causal=True,
+                num_splits=0,
             )
 
         return run_iteration

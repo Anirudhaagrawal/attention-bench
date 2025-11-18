@@ -9,7 +9,7 @@ model:
   num_qo_heads: 32
   num_kv_heads: 8
   head_dim: 128
-  page_size: 256
+  page_size: 16
   workspace_size: 536870912
 profiling:
   num_warmup_iters: 5
@@ -20,6 +20,7 @@ output:
 
 # Approaches to benchmark
 approaches:
+  - flashinfer_batch_attention
   - flashinfer_mixed_fa2
   - flashinfer_mixed_fa3
   # - flashinfer_mixed_cudnn

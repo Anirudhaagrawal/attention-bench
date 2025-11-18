@@ -107,7 +107,9 @@ class ToleranceBenchmarkRunner:
             dtype=torch.int32, device="cuda"
         )
 
-        kv_page_indices = torch.arange(sum(num_pages), dtype=torch.int32, device="cuda")
+        # Use shuffled page indices to simulate realistic scattered memory allocation
+        # (like vLLM/SGLang where blocks are reused and non-sequential)
+        kv_page_indices = torch.randperm(sum(num_pages), dtype=torch.int32, device="cuda")
 
         kv_page_indptr = torch.tensor(
             [0] + list(torch.cumsum(torch.tensor(num_pages), 0)),

@@ -3,3 +3,7 @@ archived/
 plots/
 results/
 __pycache__/
+approaches/__pycache__/
+configs/__pycache__/
+**/__pycache__/
+*.pyc

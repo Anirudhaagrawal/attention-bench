@@ -138,7 +138,7 @@ class ApproachRegistry:
             @APPROACHES.register
             class MyApproach:
                 name = "my_approach"
-                default_page_size = 256
+                default_page_size = 16
                 def benchmark(...): ...
         """
         approach = approach_class()

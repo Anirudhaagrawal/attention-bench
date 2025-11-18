@@ -24,7 +24,7 @@ class FlashInferMixedFA2:
     """FlashInfer: Prefill wrapper (FA2 backend) for ALL requests."""
 
     name = "flashinfer_mixed_fa2"
-    default_page_size = 256
+    default_page_size = 16
 
     def setup(self, ctx: BenchmarkContext) -> Callable[[], torch.Tensor]:
         """Setup FA2 wrapper and return benchmark callable."""
@@ -57,7 +57,7 @@ class FlashInferMixedFA3:
     """FlashInfer: Prefill wrapper (FA3 backend) for ALL requests."""
 
     name = "flashinfer_mixed_fa3"
-    default_page_size = 256
+    default_page_size = 16
 
     def setup(self, ctx: BenchmarkContext) -> Callable[[], torch.Tensor]:
         """Setup FA3 wrapper and return benchmark callable."""
@@ -91,7 +91,7 @@ class FlashInferSeparatedFA2:
     """FlashInfer: Separate decode + prefill wrappers with FA2 backend."""
 
     name = "flashinfer_separated_fa2"
-    default_page_size = 256
+    default_page_size = 16
 
     def setup(self, ctx: BenchmarkContext) -> Callable[[], torch.Tensor]:
         """Setup separated decode + prefill wrappers and return benchmark callable."""
@@ -185,7 +185,8 @@ class FlashInferSeparatedFA2:
         kv_cache = torch.randn(sum(num_pages), 2, ctx.page_size, ctx.num_kv_heads, ctx.head_dim, dtype=torch.float16, device="cuda")
 
         qo_indptr = torch.tensor([0] + list(torch.cumsum(torch.tensor(q_lengths), 0)), dtype=torch.int32, device="cuda")
-        kv_page_indices = torch.arange(sum(num_pages), dtype=torch.int32, device="cuda")
+        # Use shuffled indices for realistic scattered memory
+        kv_page_indices = torch.randperm(sum(num_pages), dtype=torch.int32, device="cuda")
         kv_page_indptr = torch.tensor([0] + list(torch.cumsum(torch.tensor(num_pages), 0)), dtype=torch.int32, device="cuda")
         kv_last_page_len = torch.tensor(
             [kv % ctx.page_size if kv % ctx.page_size != 0 else ctx.page_size for kv in kv_lengths],
@@ -204,7 +205,7 @@ class FlashInferSeparatedFA3:
     """FlashInfer: Separate decode + prefill wrappers with FA3 backend."""
 
     name = "flashinfer_separated_fa3"
-    default_page_size = 256
+    default_page_size = 16
 
     def setup(self, ctx: BenchmarkContext) -> Callable[[], torch.Tensor]:
         """Setup separated decode + prefill wrappers and return benchmark callable."""
@@ -277,7 +278,8 @@ class FlashInferSeparatedFA3:
         kv_cache = torch.randn(sum(num_pages), 2, ctx.page_size, ctx.num_kv_heads, ctx.head_dim, dtype=torch.float16, device="cuda")
 
         qo_indptr = torch.tensor([0] + list(torch.cumsum(torch.tensor(q_lengths), 0)), dtype=torch.int32, device="cuda")
-        kv_page_indices = torch.arange(sum(num_pages), dtype=torch.int32, device="cuda")
+        # Use shuffled indices for realistic scattered memory
+        kv_page_indices = torch.randperm(sum(num_pages), dtype=torch.int32, device="cuda")
         kv_page_indptr = torch.tensor([0] + list(torch.cumsum(torch.tensor(num_pages), 0)), dtype=torch.int32, device="cuda")
         kv_last_page_len = torch.tensor(
             [kv % ctx.page_size if kv % ctx.page_size != 0 else ctx.page_size for kv in kv_lengths],
@@ -292,7 +294,7 @@ class FlashInferBatchAttention:
     """FlashInfer: BatchAttention unified wrapper (if available)."""
 
     name = "flashinfer_batch_attention"
-    default_page_size = 256
+    default_page_size = 16
 
     def setup(self, ctx: BenchmarkContext) -> Callable[[], torch.Tensor]:
         """Setup BatchAttention wrapper and return benchmark callable."""
@@ -324,40 +326,5 @@ class FlashInferBatchAttention:
         # Return callable
         def run_iteration():
             return batch_wrapper.run(ctx.q, ctx.kv_cache)
-
-        return run_iteration
-
-
-@APPROACHES.register
-class FlashInferMixedCuDNN:
-    """FlashInfer: Prefill wrapper (cuDNN backend) for ALL requests."""
-
-    name = "flashinfer_mixed_cudnn"
-    default_page_size = 256
-
-    def setup(self, ctx: BenchmarkContext) -> Callable[[], torch.Tensor]:
-        """Setup cuDNN wrapper and return benchmark callable."""
-        # Create wrapper
-        workspace = torch.empty(ctx.workspace_size, dtype=torch.uint8, device="cuda")
-        wrapper = BatchPrefillWithPagedKVCacheWrapper(workspace, "NHD", backend="cudnn")
-
-        # Plan - cuDNN with seq_lens (KV) but NOT seq_lens_q or block_tables
-        # cuDNN says: "seq_len_q and seq_len_kv needs to be set only if padding mask is enabled"
-        wrapper.plan(
-            ctx.qo_indptr,
-            ctx.kv_page_indptr,
-            ctx.kv_page_indices,
-            ctx.kv_last_page_len,
-            ctx.num_qo_heads,
-            ctx.num_kv_heads,
-            ctx.head_dim,
-            ctx.page_size,
-            causal=True,
-            seq_lens=ctx.seq_lens_kv,
-        )
-
-        # Return callable
-        def run_iteration():
-            return wrapper.run(ctx.q, ctx.kv_cache)
 
         return run_iteration
