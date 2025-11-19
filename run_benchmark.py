@@ -11,6 +11,7 @@ Usage:
 """
 
 import argparse
+import gc
 import json
 import math
 import os
@@ -29,6 +30,9 @@ from flashinfer.page import get_seq_lens
 
 # Import approaches registry
 from approaches import APPROACHES, BenchmarkContext
+
+# Import timing utilities
+from timing import RecordFunctionTracer
 
 # Check for BatchAttention availability
 try:
@@ -73,6 +77,7 @@ class ToleranceResult:
     num_prefills: int
     prefill_ratio: float
     approach_times: Dict[str, Optional[float]]
+    approach_time_stats: Dict[str, Optional[Dict[str, float]]]  # min, max, mean, median, std
     page_sizes: Dict[str, int]
     used_cuda_graphs: bool
 
@@ -246,8 +251,16 @@ class ToleranceBenchmarkRunner:
         print(f"\nWorkload: {num_decodes} decodes + {num_prefills} prefills ({prefill_ratio*100:.1f}% prefill)")
         print(f"Approaches to run: {', '.join(approaches_to_run)}\n")
 
+        # Determine page_size once for all approaches (use global default)
+        # This ensures all approaches use the same input buffers for fair comparison
+        page_size = self.config.page_size
+
+        # Create shared context once for all approaches
+        ctx = self._create_benchmark_context(all_q_lengths, all_kv_lengths, page_size)
+
         # Run each approach
         approach_times = {}
+        approach_time_stats = {}
         page_sizes = {}
 
         for i, approach_name in enumerate(approaches_to_run, 1):
@@ -258,44 +271,54 @@ class ToleranceBenchmarkRunner:
 
             print(f"[{i}/{len(approaches_to_run)}] {approach_name}...")
 
-            # Determine page_size: check overrides, then approach default, then global default
-            page_size = self.config.page_size
-            if approach_name in self.config.approach_overrides:
-                page_size = self.config.approach_overrides[approach_name].get("page_size", page_size)
-            else:
-                page_size = getattr(approach, "default_page_size", page_size)
-
             # Run the approach
             try:
-                # All approaches use setup() interface
-                ctx = self._create_benchmark_context(all_q_lengths, all_kv_lengths, page_size)
-
-                # Approach sets up and returns callable
+                # Approach sets up and returns callable (uses shared ctx)
                 run_fn = approach.setup(ctx)
 
-                # Runner handles warmup
-                for _ in range(ctx.num_warmup_iters):
-                    run_fn()
+                # Warmup: run once to ensure kernels are compiled
+                run_fn()
                 torch.cuda.synchronize()
 
-                # Runner handles timing
-                start = torch.cuda.Event(enable_timing=True)
-                end = torch.cuda.Event(enable_timing=True)
-                start.record()
-                for _ in range(ctx.num_active_iters):
-                    run_fn()
-                end.record()
-                torch.cuda.synchronize()
+                # Profile with RecordFunctionTracer
+                tracer = RecordFunctionTracer(output_dir=self.config.results_dir)
+                with tracer:
+                    for _ in range(ctx.num_active_iters):
+                        with torch.profiler.record_function(approach_name):
+                            run_fn()
 
-                time_ms = start.elapsed_time(end) / ctx.num_active_iters
+                # Get detailed statistics
+                time_stats_dict = tracer.get_operation_time_stats()
 
-                approach_times[approach_name] = time_ms
-                page_sizes[approach_name] = page_size
-                print(f"  {approach_name}: {time_ms:.3f} ms (page_size={page_size})")
+                if approach_name in time_stats_dict:
+                    time_stats = time_stats_dict[approach_name]
+                    time_ms = time_stats['mean']
+
+                    approach_times[approach_name] = time_ms
+                    approach_time_stats[approach_name] = time_stats
+                    page_sizes[approach_name] = page_size
+
+                    print(f"  {approach_name}: {time_ms:.3f} ms (±{time_stats['std']:.3f}, "
+                          f"median={time_stats['median']:.3f}, page_size={page_size})")
+                else:
+                    # Fallback if profiling didn't capture the operation
+                    approach_times[approach_name] = None
+                    approach_time_stats[approach_name] = None
+                    print(f"  {approach_name}: FAILED - no timing data captured")
 
             except Exception as e:
                 print(f"  {approach_name}: FAILED - {e}")
                 approach_times[approach_name] = None
+                approach_time_stats[approach_name] = None
+
+            finally:
+                # Clean up approach-specific resources to prevent memory accumulation
+                if 'run_fn' in locals():
+                    del run_fn
+                if 'tracer' in locals():
+                    del tracer
+                torch.cuda.synchronize()
+                torch.cuda.empty_cache()
 
         # Print summary
         print(f"\n{'=' * 80}")
@@ -304,7 +327,12 @@ class ToleranceBenchmarkRunner:
             if approach_name in approach_times and approach_times[approach_name] is not None:
                 time_ms = approach_times[approach_name]
                 ps = page_sizes.get(approach_name, self.config.page_size)
-                print(f"  {approach_name:35s}: {time_ms:8.3f} ms (page_size={ps})")
+                stats = approach_time_stats.get(approach_name)
+                if stats:
+                    print(f"  {approach_name:35s}: {time_ms:8.3f} ms (±{stats['std']:6.3f}, "
+                          f"median={stats['median']:8.3f}, page_size={ps})")
+                else:
+                    print(f"  {approach_name:35s}: {time_ms:8.3f} ms (page_size={ps})")
             else:
                 print(f"  {approach_name:35s}:      N/A")
 
@@ -319,19 +347,27 @@ class ToleranceBenchmarkRunner:
         print(f"  CUDA Graphs: {'ENABLED' if self.config.use_cuda_graphs else 'DISABLED'}")
         print(f"{'=' * 80}")
 
+        # Clean up shared context after all approaches complete
+        del ctx
+        torch.cuda.synchronize()
+        torch.cuda.empty_cache()
+
         return ToleranceResult(
             scenario_name=scenario_name,
             num_decodes=num_decodes,
             num_prefills=num_prefills,
             prefill_ratio=prefill_ratio,
             approach_times=approach_times,
+            approach_time_stats=approach_time_stats,
             page_sizes=page_sizes,
             used_cuda_graphs=self.config.use_cuda_graphs,
         )
 
 
 def load_config(config_path: str, use_cuda_graphs: bool, enable_profiling: bool = False):
-    """Load configuration from YAML file."""
+    """Load configuration from YAML file with programmatic generation support."""
+    import config_generator
+
     with open(config_path) as f:
         config_data = yaml.safe_load(f)
 
@@ -361,9 +397,18 @@ def load_config(config_path: str, use_cuda_graphs: bool, enable_profiling: bool 
         approach_overrides=config_data.get("approach_overrides", {}),
     )
 
-    # Load variants
+    # Generate variants and scenarios programmatically
+    if "scenario_generation" in config_data:
+        variants_dict, scenarios_dict = config_generator.generate_scenarios(
+            config_data["scenario_generation"]
+        )
+        print(f"Generated {len(variants_dict)} variants and {len(scenarios_dict)} scenarios")
+    else:
+        raise ValueError("Config must contain 'scenario_generation' section")
+
+    # Convert variant dicts to VariantConfig objects
     variants = {}
-    for variant_name, variant_data in config_data["variants"].items():
+    for variant_name, variant_data in variants_dict.items():
         variants[variant_name] = VariantConfig(
             name=variant_name,
             q_tokens=variant_data["q_tokens"],
@@ -371,10 +416,7 @@ def load_config(config_path: str, use_cuda_graphs: bool, enable_profiling: bool 
             description=variant_data.get("description", ""),
         )
 
-    # Load scenarios
-    scenarios = config_data["scenarios"]
-
-    return config, variants, scenarios, approaches
+    return config, variants, scenarios_dict, approaches
 
 
 def save_results(results: List[ToleranceResult], output_path: str):
@@ -387,6 +429,7 @@ def save_results(results: List[ToleranceResult], output_path: str):
             "num_prefills": result.num_prefills,
             "prefill_ratio": result.prefill_ratio,
             "approach_times": result.approach_times,
+            "approach_time_stats": result.approach_time_stats,
             "page_sizes": result.page_sizes,
             "used_cuda_graphs": result.used_cuda_graphs,
         })
@@ -586,7 +629,15 @@ def main():
     parser.add_argument("--use-cuda-graphs", action="store_true", help="Enable CUDA graphs")
     parser.add_argument("--enable-profiling", action="store_true", help="Enable profiling")
     parser.add_argument("--approaches", type=str, help="Comma-separated list of approaches to run")
+    parser.add_argument("--gpu", type=int, help="GPU device to use (for parallel execution)")
+    parser.add_argument("--scenario-range", type=str, help="Range of scenarios to run, e.g., '0-24' (for parallel execution)")
     args = parser.parse_args()
+
+    # Show GPU info if specified (CUDA_VISIBLE_DEVICES set by parent process)
+    if args.gpu is not None:
+        # CUDA_VISIBLE_DEVICES is set by run_parallel.py before spawning this process
+        cuda_visible = os.environ.get('CUDA_VISIBLE_DEVICES', 'not set')
+        print(f"Using GPU {args.gpu} (CUDA_VISIBLE_DEVICES={cuda_visible})")
 
     # Load config
     config, variants, scenarios, approaches = load_config(
@@ -596,6 +647,13 @@ def main():
     # Override approaches if specified
     if args.approaches:
         approaches = [a.strip() for a in args.approaches.split(",")]
+
+    # Filter scenarios if range specified (for parallel execution)
+    if args.scenario_range:
+        start, end = map(int, args.scenario_range.split('-'))
+        scenario_items = list(scenarios.items())
+        scenarios = dict(scenario_items[start:end+1])
+        print(f"Running scenario range: {start}-{end} ({len(scenarios)} scenarios)")
 
     # Print header
     print("=" * 80)
@@ -632,28 +690,37 @@ def main():
         result = runner.run_tolerance_test(scenario_name, variant_set, approaches)
         results.append(result)
 
+        # Clean up memory between scenarios to prevent OOM
+        torch.cuda.synchronize()
+        torch.cuda.empty_cache()
+        gc.collect()
+
     # Save results
     print("\n" + "=" * 80)
     print("Saving Results")
     print("=" * 80)
 
     os.makedirs(config.results_dir, exist_ok=True)
-    timestamp = time.strftime("%Y%m%d_%H%M%S")
-    graph_suffix = "_cuda_graphs" if args.use_cuda_graphs else "_eager"
-    results_path = os.path.join(
-        config.results_dir,
-        f"tolerance_clean{graph_suffix}_{timestamp}.json"
-    )
+    config_name = os.path.splitext(os.path.basename(args.config))[0]
+
+    # Add GPU suffix if running in parallel mode
+    if args.gpu is not None:
+        results_filename = f"{config_name}_gpu{args.gpu}.json"
+    else:
+        results_filename = f"{config_name}.json"
+
+    results_path = os.path.join(config.results_dir, results_filename)
     save_results(results, results_path)
     print(f"\nResults saved to: {results_path}")
 
-    # Create plots
-    print("\n" + "=" * 80)
-    print("Creating Plots")
-    print("=" * 80)
-
-    config_name = os.path.splitext(os.path.basename(args.config))[0]
-    create_plots(results, config.plots_dir, config_name, approaches)
+    # Create plots (skip if running in parallel mode - plots will be created from merged results)
+    if args.gpu is None:
+        print("\n" + "=" * 80)
+        print("Creating Plots")
+        print("=" * 80)
+        create_plots(results, config.plots_dir, config_name, approaches)
+    else:
+        print("\nSkipping plot creation (parallel mode - plots will be created from merged results)")
 
     # Print summary
     print("\n" + "=" * 80)

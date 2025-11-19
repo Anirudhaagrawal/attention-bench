@@ -214,7 +214,12 @@ def load_data():
     """Load and prepare data for training."""
     import glob
 
-    results_files = sorted(glob.glob('results/tolerance_clean_eager_*.json'))
+    # Load all config-based result files
+    results_files = sorted(glob.glob('results/config_*.json'))
+
+    # Fall back to old naming scheme if no config files found
+    if not results_files:
+        results_files = sorted(glob.glob('results/tolerance_clean_eager_*.json'))
 
     X = []  # Features
     y = []  # Labels (winner)

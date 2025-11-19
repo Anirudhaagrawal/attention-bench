@@ -3,11 +3,13 @@
 # Run benchmarks for all config files
 #
 # Usage:
-#   ./run_all_configs.sh [approaches]
+#   ./run_all_configs.sh [approaches] [num_gpus]
 #
 # Examples:
-#   ./run_all_configs.sh                                    # Use approaches from each config file
-#   ./run_all_configs.sh official_fa3,flashinfer_mixed_fa3  # Override config files with specific approaches
+#   ./run_all_configs.sh                                    # Use approaches from each config file (sequential)
+#   ./run_all_configs.sh official_fa3,flashinfer_mixed_fa3  # Override config files with specific approaches (sequential)
+#   ./run_all_configs.sh "" 4                               # Use config approaches, run in parallel on 4 GPUs
+#   ./run_all_configs.sh official_fa3 2                     # Override approaches, run in parallel on 2 GPUs
 #
 
 set -e  # Exit on error
@@ -18,6 +20,9 @@ conda activate /scratch/anirudha/revati-vidur/env
 
 # Get approaches from command line (optional - defaults to using config file)
 APPROACHES="$1"
+
+# Get number of GPUs (optional - defaults to 1 for sequential execution)
+NUM_GPUS="${2:-1}"
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -38,6 +43,11 @@ if [ -z "$APPROACHES" ]; then
     echo -e "${GREEN}Approaches:${NC} Using approaches from config files"
 else
     echo -e "${GREEN}Approaches:${NC} $APPROACHES (overriding config files)"
+fi
+if [ "$NUM_GPUS" -gt 1 ]; then
+    echo -e "${GREEN}Execution mode:${NC} Parallel (${NUM_GPUS} GPUs per config)"
+else
+    echo -e "${GREEN}Execution mode:${NC} Sequential (1 GPU)"
 fi
 echo -e "${GREEN}Logs directory:${NC} $LOGS_DIR"
 echo ""
@@ -73,26 +83,31 @@ for i in "${!CONFIGS[@]}"; do
 
     log_file="$LOGS_DIR/${config_name}.log"
 
-    # Run benchmark and capture output
-    # Only pass --approaches if explicitly provided, otherwise use config file
-    if [ -z "$APPROACHES" ]; then
-        if python3 run_benchmark.py --config "$config" 2>&1 | tee "$log_file"; then
-            echo -e "${GREEN}✓ SUCCESS: $config_name${NC}"
-            SUCCESS=$((SUCCESS + 1))
+    # Choose between parallel and sequential execution
+    if [ "$NUM_GPUS" -gt 1 ]; then
+        # Parallel execution with multiple GPUs
+        if [ -z "$APPROACHES" ]; then
+            CMD="python3 run_parallel.py --config $config --num-gpus $NUM_GPUS"
         else
-            echo -e "${RED}✗ FAILED: $config_name${NC}"
-            FAILED=$((FAILED + 1))
-            FAILED_CONFIGS+=("$config_name")
+            CMD="python3 run_parallel.py --config $config --num-gpus $NUM_GPUS --approaches $APPROACHES"
         fi
     else
-        if python3 run_benchmark.py --config "$config" --approaches "$APPROACHES" 2>&1 | tee "$log_file"; then
-            echo -e "${GREEN}✓ SUCCESS: $config_name${NC}"
-            SUCCESS=$((SUCCESS + 1))
+        # Sequential execution with single GPU
+        if [ -z "$APPROACHES" ]; then
+            CMD="python3 run_benchmark.py --config $config"
         else
-            echo -e "${RED}✗ FAILED: $config_name${NC}"
-            FAILED=$((FAILED + 1))
-            FAILED_CONFIGS+=("$config_name")
+            CMD="python3 run_benchmark.py --config $config --approaches $APPROACHES"
         fi
+    fi
+
+    # Run benchmark and capture output
+    if $CMD 2>&1 | tee "$log_file"; then
+        echo -e "${GREEN}✓ SUCCESS: $config_name${NC}"
+        SUCCESS=$((SUCCESS + 1))
+    else
+        echo -e "${RED}✗ FAILED: $config_name${NC}"
+        FAILED=$((FAILED + 1))
+        FAILED_CONFIGS+=("$config_name")
     fi
 
     echo ""
