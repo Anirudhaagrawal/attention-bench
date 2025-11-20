@@ -1,0 +1,30 @@
+# Test config for Ray parallel execution - 4 scenarios
+profiling:
+  num_warmup_iters: 5
+  num_active_iters: 50
+
+output:
+  results_dir: "results"
+  plots_dir: "plots"
+
+model:
+  num_kv_heads: 8
+  num_qo_heads: 32
+  head_dim: 128
+  page_size: 16
+  workspace_size: 268435456  # 256MB
+
+approaches:
+  - flashinfer_batch_attention
+  - flashinfer_mixed_fa3
+  - flashinfer_separated_fa3
+
+# Scenario Generation - small test set (4 scenarios)
+scenario_generation:
+  strategy: "mixed_combinations"
+  decode_params:
+    batch_sizes: [1, 2]
+    kv_tokens: [1024, 8192]
+  prefill_params:
+    q_tokens: [512]
+    kv_tokens: [2048]

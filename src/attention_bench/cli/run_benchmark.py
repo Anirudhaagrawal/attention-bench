@@ -29,10 +29,10 @@ from flashinfer import BatchPrefillWithPagedKVCacheWrapper, BatchDecodeWithPaged
 from flashinfer.page import get_seq_lens
 
 # Import approaches registry
-from approaches import APPROACHES, BenchmarkContext
+from attention_bench.approaches import APPROACHES, BenchmarkContext
 
 # Import timing utilities
-from timing import RecordFunctionTracer
+from attention_bench.timing import RecordFunctionTracer
 
 # Check for BatchAttention availability
 try:
@@ -80,6 +80,7 @@ class ToleranceResult:
     approach_time_stats: Dict[str, Optional[Dict[str, float]]]  # min, max, mean, median, std
     page_sizes: Dict[str, int]
     used_cuda_graphs: bool
+    skipped_reason: Optional[str] = None  # Reason if scenario was skipped (e.g., OOM)
 
 
 class ToleranceBenchmarkRunner:
@@ -251,6 +252,37 @@ class ToleranceBenchmarkRunner:
         print(f"\nWorkload: {num_decodes} decodes + {num_prefills} prefills ({prefill_ratio*100:.1f}% prefill)")
         print(f"Approaches to run: {', '.join(approaches_to_run)}\n")
 
+        # Memory estimation check (optional - can be enabled via config)
+        memory_check_enabled = getattr(self.config, 'enable_memory_check', False)
+        if memory_check_enabled:
+            from attention_bench.utils.memory_estimator import estimate_scenario_memory
+            estimate = estimate_scenario_memory(
+                q_lengths=all_q_lengths,
+                kv_lengths=all_kv_lengths,
+                num_kv_heads=self.config.num_kv_heads,
+                num_qo_heads=self.config.num_qo_heads,
+                head_dim=self.config.head_dim,
+                page_size=self.config.page_size,
+                workspace_size=self.config.workspace_size,
+                utilization=getattr(self.config, 'memory_utilization', 0.90),
+                overhead=getattr(self.config, 'memory_overhead', 1.1)
+            )
+
+            if not estimate.fits:
+                skip_reason = f"OOM: needs {estimate.total_gb:.2f}GB, have {estimate.available_gb:.2f}GB"
+                print(f"SKIPPED: {skip_reason}")
+                return ToleranceResult(
+                    scenario_name=scenario_name,
+                    num_decodes=num_decodes,
+                    num_prefills=num_prefills,
+                    prefill_ratio=prefill_ratio,
+                    approach_times={a: None for a in approaches_to_run},
+                    approach_time_stats={a: None for a in approaches_to_run},
+                    page_sizes={},
+                    used_cuda_graphs=self.config.use_cuda_graphs,
+                    skipped_reason=skip_reason,
+                )
+
         # Determine page_size once for all approaches (use global default)
         # This ensures all approaches use the same input buffers for fair comparison
         page_size = self.config.page_size
@@ -366,7 +398,7 @@ class ToleranceBenchmarkRunner:
 
 def load_config(config_path: str, use_cuda_graphs: bool, enable_profiling: bool = False):
     """Load configuration from YAML file with programmatic generation support."""
-    import config_generator
+    from attention_bench.config import generator as config_generator
 
     with open(config_path) as f:
         config_data = yaml.safe_load(f)

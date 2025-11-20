@@ -15,6 +15,11 @@ try:
         load_benchmark_results,
         format_number,
     )
+    from .workload_categorizer import (
+        categorize_workload,
+        get_category_display_name,
+        get_category_description,
+    )
 except ImportError:
     from utils import (
         parse_decode_scenario,
@@ -22,12 +27,18 @@ except ImportError:
         load_benchmark_results,
         format_number,
     )
+    from workload_categorizer import (
+        categorize_workload,
+        get_category_display_name,
+        get_category_description,
+    )
 
 
 def create_decode_heatmap(
     results_file: str,
     output_file: str = "plots/decode_heatmap.png",
     dark_mode: bool = False,
+    workload_category: str = None,
 ):
     """
     Create a 2D heatmap for decode benchmark results.
@@ -36,6 +47,7 @@ def create_decode_heatmap(
         results_file: Path to benchmark results JSON
         output_file: Path to save the heatmap
         dark_mode: Use dark theme
+        workload_category: Optional filter by workload ('code', 'chat', 'summarization')
 
     The heatmap shows:
         - Rows: Batch sizes
@@ -72,6 +84,12 @@ def create_decode_heatmap(
         batch, kv = parse_decode_scenario(name)
         if batch == 0 or kv == 0:
             continue
+
+        # Filter by workload category if specified
+        if workload_category:
+            categories = categorize_workload(batch, 1, kv, 'decode')  # query=1 for decode
+            if workload_category not in categories:
+                continue
 
         # Calculate speedup
         speedup = calculate_speedup(fa3_time, ba_time)
@@ -183,8 +201,13 @@ def create_decode_heatmap(
     # Customize axes
     ax.set_xlabel('KV Length', fontsize=12, fontweight='bold')
     ax.set_ylabel('Batch Size', fontsize=12, fontweight='bold')
-    ax.set_title('Decode: FA3 vs BatchAttention Performance',
-                fontsize=14, fontweight='bold', pad=15)
+
+    # Create title with optional workload category
+    title = 'Decode: FA3 vs BatchAttention Performance'
+    if workload_category:
+        cat_display = get_category_display_name(workload_category)
+        title = f'Decode ({cat_display}): FA3 vs BatchAttention Performance'
+    ax.set_title(title, fontsize=14, fontweight='bold', pad=15)
 
     # Add colorbar
     cbar = fig_mpl.colorbar(im, ax=ax, orientation='vertical', pad=0.02)
@@ -228,6 +251,13 @@ if __name__ == "__main__":
         help="Output file path",
     )
     parser.add_argument("--dark", action="store_true", help="Use dark mode")
+    parser.add_argument(
+        "--workload-category",
+        type=str,
+        choices=['code', 'chat', 'summarization'],
+        default=None,
+        help="Filter by workload category (code/chat/summarization)"
+    )
     args = parser.parse_args()
 
-    create_decode_heatmap(args.input, args.output, args.dark)
+    create_decode_heatmap(args.input, args.output, args.dark, args.workload_category)

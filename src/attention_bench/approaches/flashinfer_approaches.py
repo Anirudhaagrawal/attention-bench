@@ -106,25 +106,9 @@ class FlashInferSeparatedFA2:
 
         # Create decode wrapper if we have decodes
         if decode_indices:
-            # Filter decode data from context
-            decode_q_lengths = [ctx.q_lengths[i] for i in decode_indices]
-            decode_kv_lengths = [ctx.kv_lengths[i] for i in decode_indices]
-
-            # Need to create separate batch data for decode
-            # This is inefficient but matches the separated approach pattern
-            from run_benchmark import ToleranceBenchmarkRunner
-            # Create a minimal runner just for batch data creation
-            temp_config = type('Config', (), {
-                'page_size': ctx.page_size,
-                'num_qo_heads': ctx.num_qo_heads,
-                'num_kv_heads': ctx.num_kv_heads,
-                'head_dim': ctx.head_dim,
-            })()
-            temp_runner = type('Runner', (), {'config': temp_config})()
-            temp_runner.create_batch_data = lambda q, kv: self._create_decode_batch(q, kv, ctx)
-
+            # Extract decode data from shared context (instead of creating new tensors)
             decode_q, decode_kv, _, decode_kv_indptr, decode_kv_indices, decode_last_page = (
-                self._create_decode_batch(decode_q_lengths, decode_kv_lengths, ctx)
+                self._extract_subset_from_context(decode_indices, ctx)
             )
 
             # Create decode wrapper
@@ -142,12 +126,9 @@ class FlashInferSeparatedFA2:
 
         # Create prefill wrapper if we have prefills
         if prefill_indices:
-            # Filter prefill data from context
-            prefill_q_lengths = [ctx.q_lengths[i] for i in prefill_indices]
-            prefill_kv_lengths = [ctx.kv_lengths[i] for i in prefill_indices]
-
+            # Extract prefill data from shared context (instead of creating new tensors)
             prefill_q, prefill_kv, prefill_qo_indptr, prefill_kv_indptr, prefill_kv_indices, prefill_last_page = (
-                self._create_prefill_batch(prefill_q_lengths, prefill_kv_lengths, ctx)
+                self._extract_subset_from_context(prefill_indices, ctx)
             )
 
             # Create prefill wrapper
@@ -176,28 +157,67 @@ class FlashInferSeparatedFA2:
 
         return run_iteration
 
-    def _create_decode_batch(self, q_lengths, kv_lengths, ctx):
-        """Create batch data for decode requests."""
-        num_pages = [(kv + ctx.page_size - 1) // ctx.page_size for kv in kv_lengths]
+    def _extract_subset_from_context(self, indices, ctx):
+        """Extract a subset of requests from the shared context.
 
-        q = torch.randn(sum(q_lengths), ctx.num_qo_heads, ctx.head_dim, dtype=torch.float16, device="cuda")
-        # Correct KV cache layout: (num_pages, 2, page_size, num_kv_heads, head_dim)
-        kv_cache = torch.randn(sum(num_pages), 2, ctx.page_size, ctx.num_kv_heads, ctx.head_dim, dtype=torch.float16, device="cuda")
+        Instead of creating new random tensors, this extracts the relevant portions
+        from ctx.q and ctx.kv_cache to ensure all approaches benchmark on the same data.
 
+        Args:
+            indices: List of request indices to extract (e.g., decode_indices or prefill_indices)
+            ctx: Shared BenchmarkContext
+
+        Returns:
+            Tuple of (q, kv_cache, qo_indptr, kv_page_indptr, kv_page_indices, kv_last_page_len)
+        """
+        # Extract Q tokens for selected requests
+        q_slices = []
+        for idx in indices:
+            start = ctx.qo_indptr[idx].item()
+            end = ctx.qo_indptr[idx + 1].item()
+            q_slices.append(ctx.q[start:end])
+        q = torch.cat(q_slices, dim=0) if q_slices else torch.empty(0, ctx.num_qo_heads, ctx.head_dim, dtype=torch.float16, device="cuda")
+
+        # Extract KV cache pages for selected requests
+        kv_page_list = []
+        new_kv_page_indices = []
+        new_page_offset = 0
+
+        for idx in indices:
+            # Get the range of pages for this request
+            page_start = ctx.kv_page_indptr[idx].item()
+            page_end = ctx.kv_page_indptr[idx + 1].item()
+
+            # Get the physical page indices for this request
+            logical_pages = ctx.kv_page_indices[page_start:page_end]
+
+            # Extract the actual pages from kv_cache
+            for page_idx in logical_pages:
+                kv_page_list.append(ctx.kv_cache[page_idx.item()])
+                # Map to new contiguous indices
+                new_kv_page_indices.append(new_page_offset)
+                new_page_offset += 1
+
+        kv_cache = torch.stack(kv_page_list, dim=0) if kv_page_list else torch.empty(0, 2, ctx.page_size, ctx.num_kv_heads, ctx.head_dim, dtype=torch.float16, device="cuda")
+
+        # Build new metadata for the subset
+        q_lengths = [ctx.q_lengths[i] for i in indices]
         qo_indptr = torch.tensor([0] + list(torch.cumsum(torch.tensor(q_lengths), 0)), dtype=torch.int32, device="cuda")
-        # Use shuffled indices for realistic scattered memory
-        kv_page_indices = torch.randperm(sum(num_pages), dtype=torch.int32, device="cuda")
-        kv_page_indptr = torch.tensor([0] + list(torch.cumsum(torch.tensor(num_pages), 0)), dtype=torch.int32, device="cuda")
-        kv_last_page_len = torch.tensor(
-            [kv % ctx.page_size if kv % ctx.page_size != 0 else ctx.page_size for kv in kv_lengths],
-            dtype=torch.int32, device="cuda"
-        )
+
+        # Build kv_page_indptr for subset
+        num_pages_per_request = []
+        for idx in indices:
+            page_start = ctx.kv_page_indptr[idx].item()
+            page_end = ctx.kv_page_indptr[idx + 1].item()
+            num_pages_per_request.append(page_end - page_start)
+        kv_page_indptr = torch.tensor([0] + list(torch.cumsum(torch.tensor(num_pages_per_request), 0)), dtype=torch.int32, device="cuda")
+
+        kv_page_indices = torch.tensor(new_kv_page_indices, dtype=torch.int32, device="cuda") if new_kv_page_indices else torch.empty(0, dtype=torch.int32, device="cuda")
+
+        # Extract last page lengths for selected requests
+        kv_last_page_len = ctx.kv_last_page_len[indices] if len(indices) > 0 else torch.empty(0, dtype=torch.int32, device="cuda")
 
         return q, kv_cache, qo_indptr, kv_page_indptr, kv_page_indices, kv_last_page_len
-
-    def _create_prefill_batch(self, q_lengths, kv_lengths, ctx):
-        """Create batch data for prefill requests."""
-        return self._create_decode_batch(q_lengths, kv_lengths, ctx)
 
 
 @APPROACHES.register
@@ -218,11 +238,9 @@ class FlashInferSeparatedFA3:
 
         # Create decode wrapper if we have decodes
         if decode_indices:
-            decode_q_lengths = [ctx.q_lengths[i] for i in decode_indices]
-            decode_kv_lengths = [ctx.kv_lengths[i] for i in decode_indices]
-
+            # Extract decode data from shared context (instead of creating new tensors)
             decode_q, decode_kv, _, decode_kv_indptr, decode_kv_indices, decode_last_page = (
-                self._create_batch(decode_q_lengths, decode_kv_lengths, ctx)
+                self._extract_subset_from_context(decode_indices, ctx)
             )
 
             workspace = torch.empty(ctx.workspace_size, dtype=torch.uint8, device="cuda")
@@ -239,11 +257,9 @@ class FlashInferSeparatedFA3:
 
         # Create prefill wrapper if we have prefills
         if prefill_indices:
-            prefill_q_lengths = [ctx.q_lengths[i] for i in prefill_indices]
-            prefill_kv_lengths = [ctx.kv_lengths[i] for i in prefill_indices]
-
+            # Extract prefill data from shared context (instead of creating new tensors)
             prefill_q, prefill_kv, prefill_qo_indptr, prefill_kv_indptr, prefill_kv_indices, prefill_last_page = (
-                self._create_batch(prefill_q_lengths, prefill_kv_lengths, ctx)
+                self._extract_subset_from_context(prefill_indices, ctx)
             )
 
             workspace = torch.empty(ctx.workspace_size, dtype=torch.uint8, device="cuda")
@@ -270,21 +286,65 @@ class FlashInferSeparatedFA3:
 
         return run_iteration
 
-    def _create_batch(self, q_lengths, kv_lengths, ctx):
-        """Create batch data for requests."""
-        num_pages = [(kv + ctx.page_size - 1) // ctx.page_size for kv in kv_lengths]
+    def _extract_subset_from_context(self, indices, ctx):
+        """Extract a subset of requests from the shared context.
 
-        q = torch.randn(sum(q_lengths), ctx.num_qo_heads, ctx.head_dim, dtype=torch.float16, device="cuda")
-        kv_cache = torch.randn(sum(num_pages), 2, ctx.page_size, ctx.num_kv_heads, ctx.head_dim, dtype=torch.float16, device="cuda")
+        Instead of creating new random tensors, this extracts the relevant portions
+        from ctx.q and ctx.kv_cache to ensure all approaches benchmark on the same data.
 
+        Args:
+            indices: List of request indices to extract (e.g., decode_indices or prefill_indices)
+            ctx: Shared BenchmarkContext
+
+        Returns:
+            Tuple of (q, kv_cache, qo_indptr, kv_page_indptr, kv_page_indices, kv_last_page_len)
+        """
+        # Extract Q tokens for selected requests
+        q_slices = []
+        for idx in indices:
+            start = ctx.qo_indptr[idx].item()
+            end = ctx.qo_indptr[idx + 1].item()
+            q_slices.append(ctx.q[start:end])
+        q = torch.cat(q_slices, dim=0) if q_slices else torch.empty(0, ctx.num_qo_heads, ctx.head_dim, dtype=torch.float16, device="cuda")
+
+        # Extract KV cache pages for selected requests
+        kv_page_list = []
+        new_kv_page_indices = []
+        new_page_offset = 0
+
+        for idx in indices:
+            # Get the range of pages for this request
+            page_start = ctx.kv_page_indptr[idx].item()
+            page_end = ctx.kv_page_indptr[idx + 1].item()
+
+            # Get the physical page indices for this request
+            logical_pages = ctx.kv_page_indices[page_start:page_end]
+
+            # Extract the actual pages from kv_cache
+            for page_idx in logical_pages:
+                kv_page_list.append(ctx.kv_cache[page_idx.item()])
+                # Map to new contiguous indices
+                new_kv_page_indices.append(new_page_offset)
+                new_page_offset += 1
+
+        kv_cache = torch.stack(kv_page_list, dim=0) if kv_page_list else torch.empty(0, 2, ctx.page_size, ctx.num_kv_heads, ctx.head_dim, dtype=torch.float16, device="cuda")
+
+        # Build new metadata for the subset
+        q_lengths = [ctx.q_lengths[i] for i in indices]
         qo_indptr = torch.tensor([0] + list(torch.cumsum(torch.tensor(q_lengths), 0)), dtype=torch.int32, device="cuda")
-        # Use shuffled indices for realistic scattered memory
-        kv_page_indices = torch.randperm(sum(num_pages), dtype=torch.int32, device="cuda")
-        kv_page_indptr = torch.tensor([0] + list(torch.cumsum(torch.tensor(num_pages), 0)), dtype=torch.int32, device="cuda")
-        kv_last_page_len = torch.tensor(
-            [kv % ctx.page_size if kv % ctx.page_size != 0 else ctx.page_size for kv in kv_lengths],
-            dtype=torch.int32, device="cuda"
-        )
+
+        # Build kv_page_indptr for subset
+        num_pages_per_request = []
+        for idx in indices:
+            page_start = ctx.kv_page_indptr[idx].item()
+            page_end = ctx.kv_page_indptr[idx + 1].item()
+            num_pages_per_request.append(page_end - page_start)
+        kv_page_indptr = torch.tensor([0] + list(torch.cumsum(torch.tensor(num_pages_per_request), 0)), dtype=torch.int32, device="cuda")
+
+        kv_page_indices = torch.tensor(new_kv_page_indices, dtype=torch.int32, device="cuda") if new_kv_page_indices else torch.empty(0, dtype=torch.int32, device="cuda")
+
+        # Extract last page lengths for selected requests
+        kv_last_page_len = ctx.kv_last_page_len[indices] if len(indices) > 0 else torch.empty(0, dtype=torch.int32, device="cuda")
 
         return q, kv_cache, qo_indptr, kv_page_indptr, kv_page_indices, kv_last_page_len
 

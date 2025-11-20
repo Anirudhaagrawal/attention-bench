@@ -1,7 +1,41 @@
+# Claude Code
 .claude*
+
+# Archived code
 archived/
+
+# Python
 __pycache__/
 approaches/__pycache__/
 configs/__pycache__/
 **/__pycache__/
 *.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# Data directory - ALL generated data (results, plots, logs, profiler traces)
+data/
+results/
+plots/
+logs/
+profiler_traces/
+*.json
+*.png
+*.log
+
+# But keep example configs
+!configs/*.yaml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

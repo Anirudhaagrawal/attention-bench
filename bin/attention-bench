@@ -1,0 +1,7 @@
+#!/usr/bin/env python3
+"""Entry point for attention-bench CLI."""
+import sys
+from attention_bench.cli.run_benchmark import main
+
+if __name__ == "__main__":
+    sys.exit(main())

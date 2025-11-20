@@ -1,8 +1,8 @@
-# FlashInfer Heterogeneity Experiment
+# Attention Kernel Benchmark
 
 ## Overview
 
-Unified benchmark comparing FlashInfer (FA2, FA3, cuDNN backends) and Official FlashAttention-3 for heterogeneous batch workloads.
+Comprehensive benchmark framework for comparing attention kernel implementations across heterogeneous batch workloads. Currently supports FlashInfer (FA2, FA3, cuDNN backends) and Official FlashAttention-3.
 
 ## Performance Analysis
 
@@ -165,19 +165,168 @@ While the decision tree achieves reasonable accuracy, the complexity is not just
 - `learn_decision_tree.py` - Decision tree training script
 - `archived/analysis_scripts/` - Analysis scripts used to generate this report
 
-## Usage
-
-### Basic Usage
+## Installation
 
 ```bash
-# Run with specific config
-python run_benchmark.py --config config_decode_all_combinations.yaml
+# Clone the repository
+git clone <repository-url>
+cd flashinfer-heterogeneity-experiment
+
+# Install in development mode
+pip install -e .
+
+# Verify installation
+attention-bench --help
+attention-bench-ray --help
+```
+
+## Usage
+
+### Quick Start
+
+```bash
+# Run single-GPU benchmark with specific config
+attention-bench --config configs/decode/config_decode_all_combinations.yaml
+
+# Run multi-GPU distributed benchmark with Ray
+attention-bench-ray --config configs/mixed/config_mixed_all_combinations.yaml --num-gpus 4
 
 # Override approaches from command line
-python run_benchmark.py --approaches official_fa3,flashinfer_mixed_fa3
+attention-bench --config configs/prefill/config_prefill_all_combinations.yaml \
+    --approaches official_fa3,flashinfer_mixed_fa3
 
 # Enable CUDA graphs
-python run_benchmark.py --use-cuda-graphs
+attention-bench --config configs/decode/config_decode_all_combinations.yaml --use-cuda-graphs
+```
+
+### Single-GPU Benchmarking
+
+The `attention-bench` command runs benchmarks sequentially on a single GPU:
+
+```bash
+attention-bench \
+    --config configs/mixed/config_mixed_all_combinations.yaml \
+    --approaches official_fa3,flashinfer_separated_fa3 \
+    --use-cuda-graphs
+```
+
+**Options:**
+- `--config CONFIG`: Path to YAML configuration file (required)
+- `--approaches APPROACHES`: Comma-separated list of approaches to benchmark
+- `--use-cuda-graphs`: Enable CUDA graphs for better performance
+- `--enable-profiling`: Enable profiling with PyTorch profiler
+- `--gpu GPU`: Specific GPU device to use (for parallel execution)
+- `--scenario-range RANGE`: Range of scenarios to run, e.g., '0-24' (for parallel execution)
+
+### Multi-GPU Distributed Benchmarking
+
+The `attention-bench-ray` command uses Ray for distributed execution across multiple GPUs:
+
+```bash
+attention-bench-ray \
+    --config configs/mixed/config_mixed_all_combinations.yaml \
+    --num-gpus 4 \
+    --memory-utilization 0.85 \
+    --output-dir results/distributed
+```
+
+**Benefits:**
+- **GPU isolation**: Each worker gets exclusive access to one GPU via Ray's resource management
+- **Memory safety**: Pre-filters scenarios by memory estimation to prevent OOM
+- **Batched execution**: Processes scenarios in batches with sync points for cleanup
+- **Fault tolerance**: Explicit worker cleanup and error handling
+
+**Options:**
+- `--config CONFIG`: Path to YAML configuration file (required)
+- `--num-gpus NUM_GPUS`: Number of GPUs to use for distributed execution
+- `--memory-utilization THRESHOLD`: GPU memory utilization threshold (default: 0.90)
+- `--memory-overhead MULTIPLIER`: Memory overhead multiplier for estimation (default: 1.1)
+- `--approaches APPROACHES`: Comma-separated list of approaches to benchmark
+- `--output-dir DIR`: Output directory for results (default: results/)
+
+**Memory Estimation:**
+The Ray orchestrator pre-filters scenarios based on available GPU memory:
+```bash
+# Be more conservative with memory (80% utilization)
+attention-bench-ray --config configs/mixed/config_mixed_all_combinations.yaml \
+    --num-gpus 2 \
+    --memory-utilization 0.80 \
+    --memory-overhead 1.2
+```
+
+### Running All Configs (Batch Execution)
+
+The `scripts/run_all_configs.sh` script runs benchmarks for all configuration files automatically and generates timestamped logs:
+
+```bash
+# Run all configs sequentially on 1 GPU (slower but safe)
+./scripts/run_all_configs.sh
+
+# Run all configs in parallel on 4 GPUs (faster)
+./scripts/run_all_configs.sh "" 4
+
+# Override approaches for all configs
+./scripts/run_all_configs.sh "official_fa3,flashinfer_separated_fa3" 4
+
+# Run only specific config type
+./scripts/run_all_configs.sh "" 4 decode   # Only decode configs
+./scripts/run_all_configs.sh "" 4 prefill  # Only prefill configs
+./scripts/run_all_configs.sh "" 4 mixed    # Only mixed configs
+```
+
+**Script Parameters:**
+1. **Approaches** (optional): Comma-separated list of approaches to override config defaults
+2. **Number of GPUs** (optional, default: 1): Number of GPUs for parallel execution
+3. **Config type** (optional, default: all): Filter configs by type (decode/prefill/mixed/all)
+
+**Output:**
+
+The script creates a timestamped directory in `logs/` with individual log files for each config:
+
+```
+logs/20241119_230000/
+├── config_decode_all_combinations.log
+├── config_prefill_all_combinations.log
+├── config_mixed_all_combinations.log
+└── summary.txt
+```
+
+**Summary file** (`summary.txt`) contains:
+- Timestamp and configuration
+- Success/failure counts
+- List of failed configs (if any)
+- List of all log files
+
+**Example output:**
+```bash
+$ ./scripts/run_all_configs.sh "" 4 mixed
+Attention Benchmark Suite - Running All Configs
+================================================================
+Approaches: Using approaches from config files
+Execution mode: Parallel (4 GPUs per config via Ray)
+Config type: mixed
+Logs directory: logs/20241119_230000
+
+Found 2 config file(s):
+  - configs/mixed/config_mixed_all_combinations.yaml
+  - configs/mixed/config_test_ray.yaml
+
+[1/2] Running: configs/mixed/config_mixed_all_combinations.yaml
+Command: attention-bench-ray --config configs/mixed/config_mixed_all_combinations.yaml --num-gpus 4
+...
+✓ SUCCESS: config_mixed_all_combinations (1234s)
+
+[2/2] Running: configs/mixed/config_test_ray.yaml
+...
+✓ SUCCESS: config_test_ray (45s)
+
+Summary
+================================================================
+Successful: 2/2
+Failed: 0/2
+
+Logs directory: logs/20241119_230000
+Summary file: logs/20241119_230000/summary.txt
 ```
 
 ### Available Approaches
@@ -193,20 +342,51 @@ python run_benchmark.py --use-cuda-graphs
 **Official:**
 - `official_fa3` - Official FlashAttention-3 library
 
+### Visualization and Analysis
+
+Generate heatmaps from benchmark results:
+
+```bash
+# Generate decode heatmaps
+python -m attention_bench.plotting.heatmap_decode
+
+# Generate prefill heatmaps
+python -m attention_bench.plotting.heatmap_prefill
+
+# Generate mixed workload heatmaps
+python -m attention_bench.plotting.heatmap_mixed
+
+# Filter heatmaps by workload category
+python scripts/plot_by_workload.py --workload code --type decode
+```
+
+Train decision tree for approach selection:
+
+```bash
+python -m attention_bench.analysis.decision_tree \
+    --results-dir results/ \
+    --output-dir decision_tree_results/
+```
+
 ### Available Configs
 
+Configs are organized by workload type in `configs/`:
+
+**Decode Workloads** (`configs/decode/`):
 - `config_decode_all_combinations.yaml` - Comprehensive decode workload sweep
-- `config_decode_varying_batch.yaml` - Vary batch size for decode
-- `config_decode_varying_kv.yaml` - Vary KV cache length for decode
+
+**Prefill Workloads** (`configs/prefill/`):
 - `config_prefill_all_combinations.yaml` - Comprehensive prefill workload sweep
-- `config_prefill_varying_batch.yaml` - Vary batch size for prefill
-- `config_prefill_varying_seqlen.yaml` - Vary sequence length for prefill
+
+**Mixed Workloads** (`configs/mixed/`):
 - `config_mixed_all_combinations.yaml` - Mixed decode + prefill workloads
+- `config_test_ray.yaml` - Small test config for Ray validation
 
 ### Output
 
-- `results/tolerance_clean_eager_TIMESTAMP.json` - Raw benchmark data
-- `plots/comparison_CONFIGNAME.png` - Performance comparison plot
+Benchmark results are saved to:
+- `results/<scenario_type>/*.json` - Raw benchmark data with timing statistics
+- `plots/<scenario_type>/*.png` - Performance comparison visualizations
 
 ## Configuration
 
@@ -255,54 +435,233 @@ scenarios:
 ## Repository Structure
 
 ```
-.
-├── run_benchmark.py                   # Main benchmark tool
-├── approaches/                        # Approach implementations
-│   ├── __init__.py
-│   ├── base.py                       # Protocol + Registry
-│   ├── flashinfer_approaches.py      # FlashInfer implementations
-│   └── official_fa3_approaches.py    # Official FA3 implementation
-├── config_*.yaml                      # Benchmark configurations
-├── results/                           # Benchmark results (JSON)
-├── plots/                             # Generated plots
-└── archived/                          # Old/temporary files
+attention-bench/
+├── bin/                               # Executable entry points
+│   ├── attention-bench                # Single-GPU benchmark CLI
+│   └── attention-bench-ray            # Multi-GPU Ray orchestrator
+├── configs/                           # Benchmark configurations
+│   ├── decode/                        # Decode-only workloads
+│   ├── prefill/                       # Prefill-only workloads
+│   └── mixed/                         # Mixed decode+prefill workloads
+├── data/                              # Generated data (gitignored)
+│   ├── results/                       # Benchmark results (JSON)
+│   ├── plots/                         # Generated visualizations
+│   ├── logs/                          # Execution logs
+│   └── profiler_traces/               # PyTorch profiler traces
+├── docs/                              # Documentation
+├── scripts/                           # Utility scripts
+│   ├── plot_by_workload.py           # Filtered heatmap generation
+│   └── run_all_configs.sh            # Batch execution script
+├── src/
+│   └── attention_bench/               # Main Python package
+│       ├── approaches/                # Kernel implementations
+│       │   ├── base.py               # Protocol + Registry
+│       │   ├── flashinfer_approaches.py
+│       │   └── official_fa3_approaches.py
+│       ├── timing/                    # Timing utilities
+│       │   ├── benchmark.py          # Benchmark runner
+│       │   └── context.py            # Shared context
+│       ├── plotting/                  # Visualization tools
+│       │   ├── heatmap_decode.py
+│       │   ├── heatmap_prefill.py
+│       │   └── heatmap_mixed.py
+│       ├── config/                    # Configuration tools
+│       │   └── generator.py          # Scenario generator
+│       ├── distributed/               # Ray distributed execution
+│       │   └── worker.py             # Ray benchmark worker
+│       ├── cli/                       # Command-line interfaces
+│       │   ├── run_benchmark.py      # Single-GPU CLI
+│       │   └── run_ray.py            # Multi-GPU Ray CLI
+│       ├── analysis/                  # Analysis tools
+│       │   └── decision_tree.py      # Decision tree training
+│       └── utils/                     # Utility functions
+│           └── memory_estimator.py   # Memory estimation
+├── tests/                             # Unit tests
+│   ├── test_approaches_work.py
+│   └── test_correctness.py
+├── setup.py                           # Package configuration
+├── requirements.txt                   # Dependencies
+├── .gitignore                         # Git ignore rules
+└── README.md                          # This file
 ```
 
 ## Requirements
 
-- PyTorch with CUDA support
-- FlashInfer (v0.5.1 or later)
-- flash-attn (v2.8.3 or later) - for Official FA3
-- NVIDIA H100 GPU (for FA3/Hopper features)
+**System Requirements:**
+- NVIDIA GPU with CUDA support (H100 recommended for FA3/Hopper features)
 - Python 3.8+
-- matplotlib, numpy, PyYAML
+- CUDA 11.8+ or 12.x
 
-## Installation
+**Python Dependencies:**
+- `torch>=2.0.0` - PyTorch with CUDA support
+- `flashinfer>=0.1.0` - FlashInfer library
+- `flash-attn>=2.8.3` - Official FlashAttention-3 (optional)
+- `ray>=2.0.0` - Ray for distributed execution
+- `numpy>=1.20.0` - Numerical computations
+- `matplotlib>=3.3.0` - Plotting
+- `seaborn>=0.11.0` - Statistical visualizations
+- `pandas>=1.3.0` - Data analysis
+- `pyyaml>=5.4` - YAML configuration parsing
+- `scikit-learn>=0.24.0` - Decision tree analysis
+
+**Installation:**
 
 ```bash
-pip install torch flashinfer-python flash-attn matplotlib numpy pyyaml
+# Install PyTorch with CUDA support (example for CUDA 12.1)
+pip install torch --index-url https://download.pytorch.org/whl/cu121
+
+# Install FlashInfer
+pip install flashinfer-python
+
+# Install flash-attn (optional, for Official FA3 benchmarks)
+pip install flash-attn --no-build-isolation
+
+# Install the benchmark package in development mode
+pip install -e .
+
+# Or install with all optional dependencies
+pip install -e ".[dev,flashinfer]"
 ```
 
 ## Adding New Approaches
 
-To add a new approach:
+To add a new attention kernel implementation:
 
-1. Create a class in `approaches/flashinfer_approaches.py` or create a new file
+1. Create a class in `src/attention_bench/approaches/` (e.g., `my_kernel_approaches.py`)
 2. Implement the `AttentionApproach` protocol:
    - `name: str` - Unique identifier
    - `default_page_size: int` - Default page size
-   - `benchmark(q_lengths, kv_lengths, runner, config) -> float` - Benchmark method
+   - `setup(ctx: BenchmarkContext) -> Callable[[], torch.Tensor]` - Setup method
 3. Register with `@APPROACHES.register` decorator
 4. Add to config YAML `approaches` list
 
 Example:
 ```python
+from attention_bench.approaches import APPROACHES, BenchmarkContext
+from typing import Callable
+import torch
+
 @APPROACHES.register
 class MyNewApproach:
-    name = "my_new_approach"
-    default_page_size = 256
+    """My custom attention kernel implementation."""
 
-    def benchmark(self, q_lengths, kv_lengths, runner, config):
-        # Implementation
-        return time_in_ms
+    name = "my_new_approach"
+    default_page_size = 16
+
+    def setup(self, ctx: BenchmarkContext) -> Callable[[], torch.Tensor]:
+        """Setup method called once before benchmark iterations.
+
+        Args:
+            ctx: BenchmarkContext with shared Q, KV tensors and metadata
+
+        Returns:
+            Callable that runs one attention iteration
+        """
+        # Initialize your kernel with ctx.q, ctx.kv_cache, ctx.qo_indptr, etc.
+        # ...
+
+        def run_iteration():
+            # Run attention and return output
+            return my_kernel.forward(ctx.q, ctx.kv_cache)
+
+        return run_iteration
+```
+
+**Key Points:**
+- All approaches benchmark on **identical shared data** from `BenchmarkContext`
+- The `setup()` method is called once; `run_iteration()` is called repeatedly for timing
+- Use `ctx.q`, `ctx.kv_cache`, `ctx.qo_indptr`, `ctx.kv_page_indptr`, etc. from shared context
+- Never create new random tensors - extract from shared context for fairness
+
+## Development
+
+### Running Tests
+
+```bash
+# Run all tests
+pytest tests/
+
+# Run specific test
+pytest tests/test_approaches_work.py -v
+
+# Run with coverage
+pytest tests/ --cov=attention_bench --cov-report=html
+```
+
+### Code Style
+
+```bash
+# Format code
+black src/ tests/
+
+# Check style
+flake8 src/ tests/
+
+# Type checking
+mypy src/
+```
+
+### Project Layout
+
+- **`src/attention_bench/`**: Main package source code
+- **`bin/`**: Executable entry points (installed to PATH)
+- **`configs/`**: Benchmark configuration files (version controlled)
+- **`data/`**: Generated data (gitignored - not version controlled)
+- **`scripts/`**: Utility scripts for batch operations
+- **`tests/`**: Unit and integration tests
+
+## Troubleshooting
+
+### Out of Memory (OOM) Errors
+
+If you encounter OOM errors during benchmarking:
+
+1. **Use Ray with memory estimation:**
+   ```bash
+   attention-bench-ray --config configs/mixed/config_mixed_all_combinations.yaml \
+       --num-gpus 2 \
+       --memory-utilization 0.80  # Be more conservative
+   ```
+
+2. **Reduce workspace size** in config:
+   ```yaml
+   model:
+     workspace_size: 268435456  # 256MB instead of 512MB
+   ```
+
+3. **Filter scenarios** by size:
+   - Edit config to remove large batch sizes or KV lengths
+   - Use `--scenario-range` to run smaller batches
+
+### Import Errors
+
+If you get import errors:
+
+```bash
+# Reinstall in development mode
+pip install -e .
+
+# Verify installation
+python -c "from attention_bench.approaches import APPROACHES; print('OK')"
+```
+
+### Ray Timeouts
+
+If Ray workers timeout:
+
+1. **Increase timeout** in `run_ray.py` (line ~246)
+2. **Reduce batch size** to fewer scenarios per sync point
+3. **Check GPU availability**: `nvidia-smi`
+
+## Citation
+
+If you use this benchmark framework in your research, please cite:
+
+```bibtex
+@misc{attention-bench,
+  title={Attention Kernel Benchmark: Comprehensive Performance Analysis for Heterogeneous Workloads},
+  author={[Your Name]},
+  year={2024},
+  url={https://github.com/[your-username]/flashinfer-heterogeneity-experiment}
+}
 ```
