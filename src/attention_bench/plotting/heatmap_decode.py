@@ -11,26 +11,56 @@ from matplotlib.colors import TwoSlopeNorm
 try:
     from .utils import (
         parse_decode_scenario,
-        calculate_speedup,
         load_benchmark_results,
         format_number,
+        get_available_approaches,
+        apply_approach_grouping,
+        APPROACH_COLORS,
+        process_approach_data,
+        render_cell_text,
+        generate_titles,
+        shorten_approach_name,
+        find_result_files,
+        create_common_argparser,
+        resolve_input_file,
+        resolve_output_file,
+        process_batch_mode,
+        initialize_matrices,
+        populate_matrices,
+        setup_colormap_pairwise,
+        render_best_performer_cells,
+        configure_heatmap_axes,
+        add_colorbar,
     )
     from .workload_categorizer import (
         categorize_workload,
-        get_category_display_name,
-        get_category_description,
     )
 except ImportError:
     from utils import (
         parse_decode_scenario,
-        calculate_speedup,
         load_benchmark_results,
         format_number,
+        get_available_approaches,
+        apply_approach_grouping,
+        APPROACH_COLORS,
+        process_approach_data,
+        render_cell_text,
+        generate_titles,
+        shorten_approach_name,
+        find_result_files,
+        create_common_argparser,
+        resolve_input_file,
+        resolve_output_file,
+        process_batch_mode,
+        initialize_matrices,
+        populate_matrices,
+        setup_colormap_pairwise,
+        render_best_performer_cells,
+        configure_heatmap_axes,
+        add_colorbar,
     )
     from workload_categorizer import (
         categorize_workload,
-        get_category_display_name,
-        get_category_description,
     )
 
 
@@ -39,46 +69,55 @@ def create_decode_heatmap(
     output_file: str = "plots/decode_heatmap.png",
     dark_mode: bool = False,
     workload_category: str = None,
+    approaches: list = None,
+    model_name: str = None,
+    tp_degree: int = None,
 ):
     """
     Create a 2D heatmap for decode benchmark results.
+    Auto-switches between two visualization modes:
+    - 2 approaches: Pairwise speedup heatmap (diverging colormap)
+    - 3+ approaches: Best performer heatmap (categorical colors showing winner)
 
     Args:
         results_file: Path to benchmark results JSON
         output_file: Path to save the heatmap
         dark_mode: Use dark theme
         workload_category: Optional filter by workload ('code', 'chat', 'summarization')
+        approaches: List of approaches to compare (default: auto-detect all)
+        model_name: Optional model name to display in title
+        tp_degree: Optional TP degree to display in title
 
     The heatmap shows:
         - Rows: Batch sizes
         - Cols: KV lengths
-        - Color: Green = FA3 wins, Red = BA wins
-        - Values: Speedup ratio (BA time / FA3 time)
+        - Pairwise mode: Green = approach1 faster, Red = approach2 faster
+        - Best performer mode: Categorical colors = winner for each cell
     """
     # Load data
     scenarios = load_benchmark_results(results_file)
 
+    # Auto-detect approaches if not specified
+    if approaches is None:
+        approaches = get_available_approaches(scenarios)
+        print(f"Auto-detected {len(approaches)} approaches: {', '.join(approaches)}")
+
+    # Apply approach grouping for decode workload
+    # fi_dec = min(sep2, sep3)
+    scenarios, approaches = apply_approach_grouping(scenarios, 'decode', approaches)
+    print(f"After grouping: {len(approaches)} approaches: {', '.join(approaches)}")
+
+    # Determine visualization mode
+    mode = "pairwise" if len(approaches) == 2 else "best_performer"
+    print(f"Using '{mode}' mode for {len(approaches)} approaches")
+
     # Parse and organize data
-    # Store (speedup, ba_time, fa3_time) tuples
     speedup_data = {}
     batch_sizes = set()
     kv_lengths = set()
 
     for scenario in scenarios:
         name = scenario['scenario_name']
-        time_stats = scenario.get('approach_time_stats', {})
-
-        # Get FA3 and BA median times
-        fa3_stats = time_stats.get('official_fa3', {})
-        ba_stats = time_stats.get('flashinfer_batch_attention', {})
-
-        fa3_time = fa3_stats.get('median') if fa3_stats else None
-        ba_time = ba_stats.get('median') if ba_stats else None
-
-        if fa3_time is None or ba_time is None:
-            continue
-        if fa3_time == float('inf') or ba_time == float('inf'):
-            continue
 
         # Parse scenario
         batch, kv = parse_decode_scenario(name)
@@ -91,103 +130,59 @@ def create_decode_heatmap(
             if workload_category not in categories:
                 continue
 
-        # Calculate speedup
-        speedup = calculate_speedup(fa3_time, ba_time)
-        speedup_data[(batch, kv)] = (speedup, ba_time, fa3_time)
+        # Extract median times from approach_time_stats
+        time_stats = scenario.get('approach_time_stats', {})
+        approach_times_raw = {}
+        for app in approaches:
+            app_stats = time_stats.get(app, {})
+            median_time = app_stats.get('median') if app_stats else None
+            if median_time is not None:
+                approach_times_raw[app] = median_time
 
-        batch_sizes.add(batch)
-        kv_lengths.add(kv)
+        # Process approach data using shared function
+        result = process_approach_data(approach_times_raw, approaches, mode)
+
+        if result is not None:
+            speedup_data[(batch, kv)] = result
+            batch_sizes.add(batch)
+            kv_lengths.add(kv)
 
     if not speedup_data:
         print(f"No valid decode scenarios found in {results_file}")
         return
 
-    # Create DataFrame
+    # Sort dimensions
     batch_sizes = sorted(batch_sizes)
     kv_lengths = sorted(kv_lengths)
 
-    # Initialize matrices with NaN for missing data
-    matrix = np.full((len(batch_sizes), len(kv_lengths)), np.nan)
-    ba_times_matrix = np.full((len(batch_sizes), len(kv_lengths)), np.nan)
-    fa3_times_matrix = np.full((len(batch_sizes), len(kv_lengths)), np.nan)
-
-    for i, batch in enumerate(batch_sizes):
-        for j, kv in enumerate(kv_lengths):
-            if (batch, kv) in speedup_data:
-                speedup, ba_time, fa3_time = speedup_data[(batch, kv)]
-                matrix[i, j] = speedup
-                ba_times_matrix[i, j] = ba_time
-                fa3_times_matrix[i, j] = fa3_time
-
-    # Create DataFrame with formatted labels
-    df = pd.DataFrame(
-        matrix,
-        index=[f"b{b}" for b in batch_sizes],
-        columns=[format_number(kv) for kv in kv_lengths],
-    )
+    # Initialize and populate matrices using consolidated functions
+    matrix, color_matrix, data_matrix = initialize_matrices(mode, len(batch_sizes), len(kv_lengths))
+    populate_matrices(mode, matrix, color_matrix, data_matrix, batch_sizes, kv_lengths, speedup_data)
 
     # Create figure manually for better control
     fig_mpl, ax = plt.subplots(figsize=(10, 8))
 
-    # Use diverging norm centered at 1.0 (ignore NaN values)
-    vmin = max(0.3, np.nanmin(matrix))
-    vmax = min(2.0, np.nanmax(matrix))
-    
-    # Ensure vmin < vcenter < vmax for TwoSlopeNorm
-    if vmin >= 1.0:
-        vmin = 0.99
-    if vmax <= 1.0:
-        vmax = 1.01
-    norm = TwoSlopeNorm(vmin=vmin, vcenter=1.0, vmax=vmax)
+    # Setup visualization based on mode
+    if mode == "pairwise":
+        cmap, norm, vmin, vmax = setup_colormap_pairwise(matrix)
+        im = ax.imshow(matrix, cmap=cmap, norm=norm, aspect='auto', interpolation='nearest')
+    else:
+        render_best_performer_cells(ax, color_matrix, dark_mode)
+        im = None
 
-    # Create heatmap with NaN handling
-    cmap = plt.cm.RdYlGn.copy()  # Red (BA wins) → Yellow → Green (FA3 wins)
-    cmap.set_bad(color='lightgray')  # Color for NaN/missing values
-
-    im = ax.imshow(
-        matrix,
-        cmap=cmap,
-        norm=norm,
-        aspect='auto',
-        interpolation='nearest',
+    # Add value annotations using shared function
+    short_names = (
+        shorten_approach_name(approaches[0]) if len(approaches) >= 1 else "",
+        shorten_approach_name(approaches[1]) if len(approaches) >= 2 else ""
     )
+    font_sizes = {'speedup': 6, 'time': 5, 'na': 6}
 
-    # Add value annotations
     for i in range(len(batch_sizes)):
         for j in range(len(kv_lengths)):
-            value = matrix[i, j]
+            data = data_matrix.get((i, j))
+            render_cell_text(ax, j, i, data, mode, short_names, font_sizes)
 
-            # Skip missing data - show N/A
-            if np.isnan(value):
-                ax.text(j, i, 'N/A',
-                       ha='center', va='center',
-                       color='gray', fontsize=10, style='italic')
-                continue
-
-            # Choose text color based on background
-            if value < 0.7 or value > 1.4:
-                text_color = 'white'
-            else:
-                text_color = 'black'
-
-            # Speedup ratio
-            ax.text(j, i - 0.25, f'{value:.2f}x',
-                   ha='center', va='center',
-                   color=text_color, fontsize=10, fontweight='bold')
-
-            # BA time (in ms) - teal color
-            ba_ms = ba_times_matrix[i, j] * 1000
-            ax.text(j, i + 0.08, f'BA:{ba_ms:.0f}',
-                   ha='center', va='center',
-                   color='#16A085', fontsize=7, fontweight='bold')
-
-            # FA3 time (in ms) - coral color
-            fa3_ms = fa3_times_matrix[i, j] * 1000
-            ax.text(j, i + 0.35, f'FA:{fa3_ms:.0f}',
-                   ha='center', va='center',
-                   color='#E74C3C', fontsize=7, fontweight='bold')
-
-    # Set ticks and labels
+    # Set ticks and labels (keeping decode-specific "b" prefix formatting)
     ax.set_xticks(range(len(kv_lengths)))
     ax.set_xticklabels([format_number(kv) for kv in kv_lengths])
     ax.set_yticks(range(len(batch_sizes)))
@@ -198,27 +193,22 @@ def create_decode_heatmap(
     ax.set_yticks(np.arange(len(batch_sizes)) - 0.5, minor=True)
     ax.grid(which='minor', color='gray', linestyle='-', linewidth=0.5)
 
-    # Customize axes
+    # Axis labels
     ax.set_xlabel('KV Length', fontsize=12, fontweight='bold')
     ax.set_ylabel('Batch Size', fontsize=12, fontweight='bold')
 
-    # Create title with optional workload category
-    title = 'Decode: FA3 vs BatchAttention Performance'
-    if workload_category:
-        cat_display = get_category_display_name(workload_category)
-        title = f'Decode ({cat_display}): FA3 vs BatchAttention Performance'
+    # Generate title and subtitle using shared function
+    title, subtitle = generate_titles('Decode', mode, approaches, workload_category, model_name, tp_degree)
     ax.set_title(title, fontsize=14, fontweight='bold', pad=15)
 
-    # Add colorbar
-    cbar = fig_mpl.colorbar(im, ax=ax, orientation='vertical', pad=0.02)
-    cbar.set_label('Speedup (BA/FA3)', rotation=270, labelpad=20,
-                   fontsize=11, fontweight='bold')
+    # Add colorbar using consolidated function
+    add_colorbar(fig_mpl, im, ax, short_names, mode, single_subplot=True)
 
-    # Add subtitle explaining colors
+    # Add subtitle
     fig_mpl.text(
         0.5,
         0.02,
-        'Green: FA3 faster  |  Red: BatchAttention faster  |  Value: Speedup ratio (BA/FA3)',
+        subtitle,
         ha='center',
         fontsize=10,
         style='italic',
@@ -235,29 +225,29 @@ def create_decode_heatmap(
 
 
 if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Generate decode heatmap")
-    parser.add_argument(
-        "--input",
-        type=str,
-        default="results/config_decode_all_combinations.json",
-        help="Path to decode benchmark results JSON file",
-    )
-    parser.add_argument(
-        "--output",
-        type=str,
-        default="plots/decode_heatmap.png",
-        help="Output file path",
-    )
-    parser.add_argument("--dark", action="store_true", help="Use dark mode")
-    parser.add_argument(
-        "--workload-category",
-        type=str,
-        choices=['code', 'chat', 'summarization'],
-        default=None,
-        help="Filter by workload category (code/chat/summarization)"
-    )
+    # Create argument parser using consolidated function
+    parser = create_common_argparser('decode', include_workload_category=True)
     args = parser.parse_args()
 
-    create_decode_heatmap(args.input, args.output, args.dark, args.workload_category)
+    # Parse approaches list if provided
+    approaches = None
+    if args.approaches:
+        approaches = [app.strip() for app in args.approaches.split(',')]
+
+    # Determine mode: batch or single
+    batch_mode = args.run_dir and args.model is None
+
+    if batch_mode:
+        # Batch mode: process all files using consolidated function
+        process_batch_mode(args, 'decode', create_decode_heatmap, approaches)
+    else:
+        # Single mode: process one file
+        input_file = resolve_input_file(args, 'decode')
+        output_file = resolve_output_file(args, 'decode')
+
+        if approaches:
+            print(f"Using specified approaches: {', '.join(approaches)}")
+
+        print(f"Reading benchmark results from: {input_file}")
+        create_decode_heatmap(input_file, output_file, args.dark, args.workload_category, approaches,
+                            args.model, args.tp_degree)

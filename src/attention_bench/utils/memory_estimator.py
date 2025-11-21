@@ -2,8 +2,8 @@
 """Memory estimation utilities for benchmark scenarios.
 
 Pre-calculates memory requirements to filter out scenarios that would OOM.
-Uses aggressive settings (90% utilization, 1.1x overhead) to run anything
-that is nearly possible.
+Uses conservative settings (80% utilization, 1.4x overhead) to prevent OOMs
+and account for separated approach memory overhead and FlashInfer internal allocations.
 """
 
 import torch
@@ -38,23 +38,32 @@ def estimate_scenario_memory(
     page_size: int,
     workspace_size: int,
     dtype_bytes: int = 2,  # FP16
-    utilization: float = 0.90,  # Aggressive: use up to 90% of GPU
-    overhead: float = 1.1,  # Minimal: 10% buffer for approach allocations
+    utilization: float = 0.80,  # Conservative: use up to 80% of GPU
+    overhead: float = 1.4,  # Conservative: 40% buffer for approach allocations
     device: int = 0
 ) -> MemoryEstimate:
-    """Estimate memory requirement for a benchmark scenario.
+    """Estimate memory requirement for a benchmark scenario on a single GPU.
+
+    IMPORTANT: For Tensor Parallelism (TP), pass the per-GPU head counts:
+      - num_kv_heads = total_kv_heads / tp_degree
+      - num_qo_heads = total_qo_heads / tp_degree
+    Each GPU only stores KV cache and activations for its portion of heads.
+
+    Example for Llama-8B (32 qo_heads, 8 kv_heads) with TP=2:
+      - Pass num_qo_heads=16, num_kv_heads=4 (per-GPU counts)
+      - Memory will be ~2x smaller than TP=1
 
     Args:
         q_lengths: Query sequence lengths for all requests
         kv_lengths: KV cache lengths for all requests
-        num_kv_heads: Number of KV heads
-        num_qo_heads: Number of query/output heads
+        num_kv_heads: Number of KV heads (per-GPU for TP > 1)
+        num_qo_heads: Number of query/output heads (per-GPU for TP > 1)
         head_dim: Head dimension
         page_size: Page size for paged attention
-        workspace_size: Workspace buffer size in bytes
+        workspace_size: Workspace buffer size in bytes (per-GPU, doesn't scale with TP)
         dtype_bytes: Bytes per element (2 for FP16)
-        utilization: Fraction of GPU memory to use (0.90 = 90%)
-        overhead: Multiplier for approach-specific allocations (1.1 = 10% extra)
+        utilization: Fraction of GPU memory to use (0.80 = 80%)
+        overhead: Multiplier for approach-specific allocations (1.4 = 40% extra)
         device: CUDA device index
 
     Returns:

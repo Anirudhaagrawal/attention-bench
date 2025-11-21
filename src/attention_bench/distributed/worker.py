@@ -102,9 +102,13 @@ class BenchmarkWorker:
 
         finally:
             # Explicit cleanup after each scenario (Vidur pattern)
-            torch.cuda.synchronize()
-            torch.cuda.empty_cache()
-            gc.collect()
+            # Multiple syncs are critical for greedy scheduling to prevent
+            # CUDA illegal memory access from stale FlashInfer workspace pointers
+            torch.cuda.synchronize()  # Wait for all kernels
+            gc.collect()              # Force Python GC
+            torch.cuda.empty_cache()  # Free cached memory
+            torch.cuda.synchronize()  # Ensure everything is done
+            gc.collect()              # Final GC pass
 
     def get_memory_info(self) -> Dict[str, float]:
         """Get current GPU memory usage.

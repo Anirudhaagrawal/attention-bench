@@ -342,23 +342,135 @@ Summary file: logs/20241119_230000/summary.txt
 **Official:**
 - `official_fa3` - Official FlashAttention-3 library
 
+### Testing Correctness
+
+Verify that all attention approaches produce identical outputs:
+
+```bash
+# Run output correctness test (tests all 6 approaches)
+python test_correctness.py
+
+# Test compares:
+# - flashinfer_separated_fa2
+# - flashinfer_separated_fa3
+# - flashinfer_mixed_fa2
+# - flashinfer_mixed_fa3
+# - flashinfer_batch_attention
+# - official_fa3
+```
+
+**Output validation is also automatically enabled during benchmarks** when `enable_output_validation=True` in the config. This compares all approach outputs using `torch.allclose(rtol=1e-3, atol=1e-3)`.
+
+### Profiling
+
+Enable detailed performance profiling using PyTorch's profiler:
+
+```bash
+# Profile a single-GPU benchmark run
+attention-bench \
+    --config configs/decode/config_decode_all_combinations.yaml \
+    --enable-profiling
+
+# Profile distributed Ray execution
+attention-bench-ray \
+    --config configs/mixed/config_mixed_all_combinations.yaml \
+    --num-gpus 4 \
+    --enable-profiling
+```
+
+**Profiling Configuration:**
+
+Control profiling behavior in your YAML config:
+
+```yaml
+profiling:
+  num_warmup_iters: 5      # Warmup iterations (not profiled)
+  num_active_iters: 50     # Active iterations (profiled and timed)
+  enable_profiling: false  # Enable PyTorch profiler (default: false)
+```
+
+**Output:**
+
+Profiler traces are saved to `profiler_traces/` directory:
+- Chrome trace format (`.json`) for visualization in `chrome://tracing`
+- Per-approach traces showing CUDA kernel timing, memory operations, and CPU overhead
+
+**Viewing Traces:**
+
+1. Open Chrome/Chromium browser
+2. Navigate to `chrome://tracing`
+3. Load the JSON trace file from `profiler_traces/`
+4. Analyze kernel execution timeline, memory transfers, and performance bottlenecks
+
+**Notes:**
+- Profiling adds overhead; use separate runs for accurate performance benchmarks
+- Traces can be large (100MB+) for complex scenarios
+- Only available for single-GPU benchmarks (not yet supported in Ray distributed mode)
+
 ### Visualization and Analysis
 
 Generate heatmaps from benchmark results:
 
 ```bash
-# Generate decode heatmaps
-python -m attention_bench.plotting.heatmap_decode
+# === BASIC USAGE ===
 
-# Generate prefill heatmaps
-python -m attention_bench.plotting.heatmap_prefill
+# Auto-detect all approaches in results file
+# - 2 approaches found → pairwise speedup heatmap (diverging colormap)
+# - 3+ approaches found → best performer heatmap (categorical colors showing winner)
+python src/attention_bench/plotting/heatmap_mixed.py \
+    --input results/config_mixed_all_combinations_ray.json
 
-# Generate mixed workload heatmaps
-python -m attention_bench.plotting.heatmap_mixed
+# Specify which approaches to compare (2 = pairwise mode)
+python src/attention_bench/plotting/heatmap_decode.py \
+    --input results/config_decode_all_combinations.json \
+    --approaches official_fa3,flashinfer_batch_attention
 
-# Filter heatmaps by workload category
-python scripts/plot_by_workload.py --workload code --type decode
+# Best performer mode with 6 approaches (auto-switches to categorical visualization)
+python src/attention_bench/plotting/heatmap_prefill.py \
+    --input results/config_prefill_all_combinations.json
+
+# === MULTI-MODEL / TP SUPPORT ===
+
+# Generate heatmaps for specific model and TP degree
+python src/attention_bench/plotting/heatmap_mixed.py \
+    --run-dir results/run_2025-11-20_16-15-39 \
+    --model llama8b \
+    --tp-degree 4
+
+# Compare specific approaches for llama70b with TP=8
+python src/attention_bench/plotting/heatmap_decode.py \
+    --run-dir results/run_2025-11-20_16-15-39 \
+    --model llama70b \
+    --tp-degree 8 \
+    --approaches flashinfer_mixed_fa3,flashinfer_separated_fa3
+
+# === ADVANCED OPTIONS ===
+
+# Dark mode
+python src/attention_bench/plotting/heatmap_mixed.py \
+    --input results/config_mixed_all_combinations_ray.json \
+    --dark
+
+# Custom output location
+python src/attention_bench/plotting/heatmap_decode.py \
+    --input results/config_decode_all_combinations.json \
+    --output plots/custom/decode_heatmap.png
+
+# Filter by workload category
+python src/attention_bench/plotting/heatmap_prefill.py \
+    --input results/config_prefill_all_combinations.json \
+    --workload-category code
 ```
+
+**Heatmap Modes:**
+- **Pairwise Mode** (2 approaches): Shows speedup ratio with diverging colormap (green=faster, red=slower)
+- **Best Performer Mode** (3+ approaches): Shows which approach is fastest in each cell with categorical colors
+  - Cell displays: Winner name, 1st place time, 2nd place time, speedup margin
+  - Color intensity indicates margin of victory
+
+**Multi-Model/TP Results:**
+When using `--run-dir`, the heatmap script automatically reads results from files matching the pattern:
+`{run_dir}/config_{type}_multi_model_tp_{model}_tp{degree}.json`
 
 Train decision tree for approach selection:
 
@@ -368,19 +480,89 @@ python -m attention_bench.analysis.decision_tree \
     --output-dir decision_tree_results/
 ```
 
+### Interactive Dashboard
+
+Launch the Streamlit dashboard for interactive exploration of benchmark results:
+
+```bash
+# Install dashboard dependencies
+pip install -r flashinfer_dashboard/requirements.txt
+
+# Run the dashboard
+cd flashinfer_dashboard
+streamlit run app.py
+```
+
+**Dashboard Features:**
+
+- **Overview**: Summary metrics, quick navigation, recent runs
+- **Heatmaps**: Interactive Plotly speedup heatmaps with zoom/pan/hover
+- **Performance**: Sortable tables, bar charts, CSV export
+- **Explorer**: Search scenarios, browse raw data, statistics
+- **Workloads**: Analysis by category (code/chat/summarization) with recommendations
+
+**Dashboard Structure:**
+
+```
+flashinfer_dashboard/
+├── app.py                    # Main overview page
+├── pages/
+│   ├── 1_Heatmaps.py        # Interactive speedup heatmaps
+│   ├── 2_Performance.py      # Tables & comparison charts
+│   ├── 3_Explorer.py         # Raw data browser
+│   └── 4_Workloads.py        # Category analysis
+├── utils/
+│   ├── data_loader.py        # Load & cache JSON results
+│   ├── filters.py            # Sidebar filter components
+│   ├── visualizations.py     # Plotly chart builders
+│   └── export.py             # CSV/report export
+└── requirements.txt
+```
+
+The dashboard automatically loads results from `results/run_*/` directories and provides:
+
+- **Real-time filtering** without regenerating plots
+- **Side-by-side comparisons** across models, TP degrees, and approaches
+- **Export capabilities** (CSV, JSON, Markdown reports)
+- **Workload categorization** (code, chat, summarization) with optimal approach recommendations
+
 ### Available Configs
 
 Configs are organized by workload type in `configs/`:
 
 **Decode Workloads** (`configs/decode/`):
 - `config_decode_all_combinations.yaml` - Comprehensive decode workload sweep
+- `config_decode_multi_model_tp.yaml` - Multi-model (Llama 8B, 70B) with TP profiling [1,2,4,8]
 
 **Prefill Workloads** (`configs/prefill/`):
 - `config_prefill_all_combinations.yaml` - Comprehensive prefill workload sweep
+- `config_prefill_multi_model_tp.yaml` - Multi-model with TP profiling
 
 **Mixed Workloads** (`configs/mixed/`):
 - `config_mixed_all_combinations.yaml` - Mixed decode + prefill workloads
+- `config_mixed_multi_model_tp.yaml` - Multi-model with TP profiling
 - `config_test_ray.yaml` - Small test config for Ray validation
+
+**Multi-Model/TP Configs:**
+
+The `*_multi_model_tp.yaml` configs benchmark multiple models (Llama 8B, Llama 70B) at different tensor parallelism (TP) degrees [1, 2, 4, 8]:
+
+```bash
+# Run multi-model/TP benchmarks with Ray
+attention-bench-ray --config configs/decode/config_decode_multi_model_tp.yaml --num-gpus 4
+```
+
+**Important:** TP profiling simulates per-GPU workload in a TP setup (e.g., TP=4 means 1/4 of the heads per GPU). This measures single-GPU kernel performance with reduced head counts - **not** actual multi-GPU distributed execution with communication overhead.
+
+**Results:** Saved per model and TP degree:
+```
+results/run_2025-11-20_16-15-39/
+├── config_decode_multi_model_tp_llama8b_tp1.json
+├── config_decode_multi_model_tp_llama8b_tp2.json
+├── config_decode_multi_model_tp_llama8b_tp4.json
+├── config_decode_multi_model_tp_llama70b_tp8.json
+└── ...
+```
 
 ### Output
 
@@ -449,6 +631,15 @@ attention-bench/
 │   ├── logs/                          # Execution logs
 │   └── profiler_traces/               # PyTorch profiler traces
 ├── docs/                              # Documentation
+├── flashinfer_dashboard/              # Interactive Streamlit dashboard
+│   ├── app.py                         # Main overview page
+│   ├── pages/                         # Dashboard pages
+│   │   ├── 1_Heatmaps.py             # Interactive heatmaps
+│   │   ├── 2_Performance.py          # Tables & charts
+│   │   ├── 3_Explorer.py             # Data browser
+│   │   └── 4_Workloads.py            # Category analysis
+│   ├── utils/                         # Dashboard utilities
+│   └── requirements.txt               # Dashboard dependencies
 ├── scripts/                           # Utility scripts
 │   ├── plot_by_workload.py           # Filtered heatmap generation
 │   └── run_all_configs.sh            # Batch execution script
@@ -503,6 +694,8 @@ attention-bench/
 - `pandas>=1.3.0` - Data analysis
 - `pyyaml>=5.4` - YAML configuration parsing
 - `scikit-learn>=0.24.0` - Decision tree analysis
+- `streamlit>=1.28.0` - Interactive dashboard (optional)
+- `plotly>=5.17.0` - Interactive visualizations (optional)
 
 **Installation:**
 

@@ -93,11 +93,37 @@ def create_test_context(
         num_blocks = end_idx - start_idx
         block_tables[i, :num_blocks] = kv_page_indices[start_idx:end_idx]
 
+    # Split into decode and prefill requests
+    decode_indices = [i for i, q_len in enumerate(q_lengths) if q_len == 1]
+    prefill_indices = [i for i, q_len in enumerate(q_lengths) if q_len > 1]
+
+    # Create views into q tensor for decode and prefill
+    # Note: For tests, we don't need to reorder, just create the views
+    if decode_indices:
+        decode_tokens = [qo_indptr[i].item() for i in decode_indices]
+        decode_q = q[decode_tokens] if len(decode_tokens) == 1 else torch.stack([q[t] for t in decode_tokens])
+    else:
+        decode_q = None
+
+    if prefill_indices:
+        prefill_slices = []
+        for i in prefill_indices:
+            start = qo_indptr[i].item()
+            end = qo_indptr[i + 1].item()
+            prefill_slices.append(q[start:end])
+        prefill_q = torch.cat(prefill_slices, dim=0) if prefill_slices else None
+    else:
+        prefill_q = None
+
     return BenchmarkContext(
         q_lengths=q_lengths,
         kv_lengths=kv_lengths,
         q=q,
         kv_cache=kv_cache,
+        decode_q=decode_q,
+        prefill_q=prefill_q,
+        decode_indices=decode_indices,
+        prefill_indices=prefill_indices,
         qo_indptr=qo_indptr,
         kv_page_indptr=kv_page_indptr,
         kv_page_indices=kv_page_indices,

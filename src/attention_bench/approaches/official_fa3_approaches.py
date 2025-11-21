@@ -23,8 +23,11 @@ class OfficialFA3:
     name = "official_fa3"
     default_page_size = 16  # Using 256 for now
 
-    def setup(self, ctx: BenchmarkContext) -> Callable[[], torch.Tensor]:
-        """Setup Official FA3 with varlen format (NO padding!) using shared data from context."""
+    def setup(self, ctx: BenchmarkContext, return_output: bool = False) -> Callable[[], torch.Tensor]:
+        """Setup Official FA3 with varlen format (NO padding!) using shared data from context.
+
+        Note: Official FA3 always returns real outputs (return_output parameter ignored for compatibility).
+        """
         if not HAS_OFFICIAL_FA3:
             raise RuntimeError(
                 "Official FlashAttention-3 not available. Install with: pip install flash-attn"

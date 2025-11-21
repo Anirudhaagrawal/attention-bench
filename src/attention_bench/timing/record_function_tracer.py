@@ -14,8 +14,11 @@ class RecordFunctionTracer:
     more accurate than simple CUDA events because it properly accounts for
     kernel launch overhead and async execution.
 
+    Profiler traces are written to a temporary file and automatically deleted
+    after statistics are extracted.
+
     Usage:
-        tracer = RecordFunctionTracer(output_dir="results")
+        tracer = RecordFunctionTracer()
         with tracer:
             for _ in range(num_iters):
                 with torch.profiler.record_function("my_operation"):
@@ -25,17 +28,12 @@ class RecordFunctionTracer:
         # stats = {"my_operation": {"min": ..., "max": ..., "mean": ..., ...}}
     """
 
-    def __init__(self, output_dir: str = "."):
-        """Initialize tracer.
-
-        Args:
-            output_dir: Directory to save profiler traces
-        """
-        trace_id = str(uuid.uuid4())[:8]
-        os.makedirs(f"{output_dir}/profiler_traces", exist_ok=True)
-        self.trace_path = (
-            f"{output_dir}/profiler_traces/profiler_trace_{trace_id}.json"
-        )
+    def __init__(self):
+        """Initialize tracer."""
+        # Use temporary file that we'll delete after reading
+        import tempfile
+        self.temp_trace = tempfile.NamedTemporaryFile(mode='w+', suffix='.json', delete=False)
+        self.trace_path = self.temp_trace.name
 
     def __enter__(self):
         self.profiler = torch.profiler.profile(
@@ -96,43 +94,50 @@ class RecordFunctionTracer:
         """
         stats = {}
 
-        trace = json.load(open(self.trace_path, "r"))["traceEvents"]
+        try:
+            trace = json.load(open(self.trace_path, "r"))["traceEvents"]
 
-        for event in trace:
-            # Look for user annotations (from record_function)
-            if not ("cat" in event and event["cat"] == "user_annotation"):
-                continue
-
-            # Find all CUDA runtime calls within this annotation
-            children = self.find_children(trace, event)
-            cuda_time = 0
-            for child in children:
-                if not ("cat" in child and child["cat"] == "cuda_runtime"):
+            for event in trace:
+                # Look for user annotations (from record_function)
+                if not ("cat" in event and event["cat"] == "user_annotation"):
                     continue
-                # Find the correlated CUDA kernel execution
-                correlated_event = self.find_correlated_event(trace, child)
-                if not correlated_event:
+
+                # Find all CUDA runtime calls within this annotation
+                children = self.find_children(trace, event)
+                cuda_time = 0
+                for child in children:
+                    if not ("cat" in child and child["cat"] == "cuda_runtime"):
+                        continue
+                    # Find the correlated CUDA kernel execution
+                    correlated_event = self.find_correlated_event(trace, child)
+                    if not correlated_event:
+                        continue
+                    cuda_time += correlated_event["dur"]
+
+                if cuda_time == 0:
                     continue
-                cuda_time += correlated_event["dur"]
 
-            if cuda_time == 0:
-                continue
+                name = event["name"]
 
-            name = event["name"]
+                if name not in stats:
+                    stats[name] = []
 
-            if name not in stats:
-                stats[name] = []
+                stats[name].append(cuda_time * 1e-3)  # convert to ms
 
-            stats[name].append(cuda_time * 1e-3)  # convert to ms
-
-        # Compute statistics for each operation
-        return {
-            operation: {
-                "min": float(np.min(times)),
-                "max": float(np.max(times)),
-                "mean": float(np.mean(times)),
-                "median": float(np.median(times)),
-                "std": float(np.std(times)),
+            # Compute statistics for each operation
+            result = {
+                operation: {
+                    "min": float(np.min(times)),
+                    "max": float(np.max(times)),
+                    "mean": float(np.mean(times)),
+                    "median": float(np.median(times)),
+                    "std": float(np.std(times)),
+                }
+                for operation, times in stats.items()
             }
-            for operation, times in stats.items()
-        }
+        finally:
+            # Clean up temporary trace file
+            if os.path.exists(self.trace_path):
+                os.unlink(self.trace_path)
+
+        return result
