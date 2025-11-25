@@ -7,6 +7,12 @@ profiling:
   num_warmup_iters: 5
   num_active_iters: 10
 
+# Memory Management (Conservative Settings)
+memory:
+  enable_memory_check: true
+  memory_utilization: 0.8   # Target 80% GPU memory usage
+  memory_overhead: 1.4       # 40% safety margin for overhead
+
 # Output Configuration
 output:
   results_dir: "results"

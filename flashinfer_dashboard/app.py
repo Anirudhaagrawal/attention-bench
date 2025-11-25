@@ -8,10 +8,11 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 from utils import (
-    load_all_results,
+    get_cached_data,
     get_available_runs,
     get_summary_stats,
     extract_approaches_from_df,
+    shorten_approach_name,
 )
 
 # Page configuration
@@ -19,22 +20,12 @@ st.set_page_config(
     page_title="Attention Bench",
     page_icon="⚡",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed"
 )
 
-# Custom CSS
+# Custom CSS for metrics (optional styling)
 st.markdown("""
 <style>
-    .main-header {
-        font-size: 2.5rem;
-        font-weight: bold;
-        margin-bottom: 0.5rem;
-    }
-    .sub-header {
-        font-size: 1.2rem;
-        color: #666;
-        margin-bottom: 2rem;
-    }
     .metric-card {
         background-color: #f0f2f6;
         padding: 1rem;
@@ -48,27 +39,11 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Title
-st.markdown('<p class="main-header">⚡ Attention Bench Dashboard</p>', unsafe_allow_html=True)
-st.markdown('<p class="sub-header">Interactive analysis of attention mechanism performance</p>', unsafe_allow_html=True)
+st.title("⚡ Attention Bench Dashboard")
+st.caption("Interactive analysis of attention mechanism performance")
 
 # Load data
-@st.cache_data
-def get_data():
-    # Look for results directory relative to dashboard location
-    results_paths = [
-        "results",
-        "../results",
-        Path(__file__).parent.parent / "results",
-    ]
-
-    for path in results_paths:
-        df = load_all_results(str(path))
-        if not df.empty:
-            return df, str(path)
-
-    return load_all_results("results"), "results"
-
-df, results_path = get_data()
+df, results_path = get_cached_data(return_path=True)
 
 if df.empty:
     st.warning("No benchmark results found. Please run some benchmarks first.")
@@ -83,6 +58,11 @@ with st.sidebar:
     st.header("📊 Data Source")
     st.caption(f"Results path: `{results_path}`")
     st.metric("Total Scenarios", stats['total_scenarios'])
+
+    # Cache clear button
+    if st.button("🔄 Refresh Data", help="Clear cache and reload all results"):
+        st.cache_data.clear()
+        st.rerun()
 
     # Quick filters
     st.header("Quick Filters")
@@ -137,7 +117,7 @@ with col2:
 
     st.subheader("Available Approaches")
     for approach in stats['approaches']:
-        st.write(f"- {approach}")
+        st.write(f"- {shorten_approach_name(approach)}")
 
 # Quick Navigation
 st.divider()
@@ -178,11 +158,13 @@ for run_id in available_runs[:5]:
 
             with col2:
                 models = run_df['model'].unique().tolist()
-                st.metric("Models", ", ".join(models))
+                st.metric("Models", len(models))
+                st.caption(", ".join(models))
 
             with col3:
                 wtypes = run_df['workload_type'].unique().tolist()
-                st.metric("Workloads", ", ".join(wtypes))
+                st.metric("Workloads", len(wtypes))
+                st.caption(", ".join(wtypes))
 
 # Footer
 st.divider()

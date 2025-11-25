@@ -26,10 +26,14 @@ def parse_decode_scenario(scenario_name: str) -> Tuple[int, int]:
         batch = int(m.group(1))
 
     # Extract kv - multiple formats
-    if m := re.search(r'_kv(\d+)k', scenario_name):
+    if m := re.search(r'_kv(\d+)M', scenario_name):
+        kv = int(m.group(1)) * 1024 * 1024
+    elif m := re.search(r'_kv(\d+)k', scenario_name):
         kv = int(m.group(1)) * 1024
     elif m := re.search(r'_kv(\d+)(?:_|$)', scenario_name):
         kv = int(m.group(1))
+    elif m := re.search(r'seq(\d+)M', scenario_name):
+        kv = int(m.group(1)) * 1024 * 1024
     elif m := re.search(r'seq(\d+)k', scenario_name):
         kv = int(m.group(1)) * 1024
     elif m := re.search(r'seq(\d+)', scenario_name):
@@ -61,10 +65,15 @@ def parse_prefill_scenario(scenario_name: str) -> Tuple[int, int, int]:
         batch = int(m.group(1))
 
     # Extract query
-    if m := re.search(r'_q(\d+)k', scenario_name):
+    if m := re.search(r'_q(\d+)M', scenario_name):
+        query = int(m.group(1)) * 1024 * 1024
+    elif m := re.search(r'_q(\d+)k', scenario_name):
         query = int(m.group(1)) * 1024
     elif m := re.search(r'_q(\d+)', scenario_name):
         query = int(m.group(1))
+    elif m := re.search(r'seq(\d+)M', scenario_name):
+        # seq format: assume query = kv
+        query = int(m.group(1)) * 1024 * 1024
     elif m := re.search(r'seq(\d+)k', scenario_name):
         # seq format: assume query = kv
         query = int(m.group(1)) * 1024
@@ -72,7 +81,9 @@ def parse_prefill_scenario(scenario_name: str) -> Tuple[int, int, int]:
         query = int(m.group(1))
 
     # Extract kv
-    if m := re.search(r'_kv(\d+)k', scenario_name):
+    if m := re.search(r'_kv(\d+)M', scenario_name):
+        kv = int(m.group(1)) * 1024 * 1024
+    elif m := re.search(r'_kv(\d+)k', scenario_name):
         kv = int(m.group(1)) * 1024
     elif m := re.search(r'_kv(\d+)(?:_|$)', scenario_name):
         kv = int(m.group(1))
@@ -106,21 +117,30 @@ def parse_mixed_scenario(scenario_name: str) -> Tuple[int, int, int, int]:
         decode_batch = int(m.group(1))
 
     # Extract decode KV (appears after dec_b, before pref)
-    if m := re.search(r'dec_b\d+_kv(\d+)k', scenario_name):
+    # Check for M (millions) first, then k (thousands), then raw number
+    if m := re.search(r'dec_b\d+_kv(\d+)M', scenario_name):
+        decode_kv = int(m.group(1)) * 1024 * 1024
+    elif m := re.search(r'dec_b\d+_kv(\d+)k', scenario_name):
         decode_kv = int(m.group(1)) * 1024
     elif m := re.search(r'dec_b\d+_kv(\d+)', scenario_name):
         decode_kv = int(m.group(1))
 
     # Extract prefill query
-    if m := re.search(r'pref_q(\d+)k', scenario_name):
+    # Check for M (millions) first, then k (thousands), then raw number
+    if m := re.search(r'pref_q(\d+)M', scenario_name):
+        prefill_query = int(m.group(1)) * 1024 * 1024
+    elif m := re.search(r'pref_q(\d+)k', scenario_name):
         prefill_query = int(m.group(1)) * 1024
     elif m := re.search(r'pref_q(\d+)', scenario_name):
         prefill_query = int(m.group(1))
 
     # Extract prefill KV (last kv in the string)
-    if m := re.search(r'pref_q\d+k?_kv(\d+)k', scenario_name):
+    # Check for M (millions) first, then k (thousands), then raw number
+    if m := re.search(r'pref_q\d+[kM]?_kv(\d+)M', scenario_name):
+        prefill_kv = int(m.group(1)) * 1024 * 1024
+    elif m := re.search(r'pref_q\d+[kM]?_kv(\d+)k', scenario_name):
         prefill_kv = int(m.group(1)) * 1024
-    elif m := re.search(r'pref_q\d+k?_kv(\d+)', scenario_name):
+    elif m := re.search(r'pref_q\d+[kM]?_kv(\d+)', scenario_name):
         prefill_kv = int(m.group(1))
 
     return (decode_batch, decode_kv, prefill_query, prefill_kv)

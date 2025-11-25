@@ -5,6 +5,7 @@ import pandas as pd
 from typing import List, Any
 import json
 from datetime import datetime
+from .visualizations import shorten_approach_name
 
 
 def create_csv_download(df: pd.DataFrame, filename: str = "benchmark_results.csv") -> None:
@@ -82,7 +83,7 @@ def create_markdown_report(
     report.append(f"- **Models**: {', '.join(df['model'].unique())}")
     report.append(f"- **TP Degrees**: {', '.join(map(str, df['tp_degree'].unique()))}")
     report.append(f"- **Workload Types**: {', '.join(df['workload_type'].unique())}")
-    report.append(f"- **Approaches Compared**: {', '.join(approaches)}")
+    report.append(f"- **Approaches Compared**: {', '.join([shorten_approach_name(a) for a in approaches])}")
     report.append("")
 
     # Filters applied
@@ -103,7 +104,7 @@ def create_markdown_report(
             times = df[col].dropna() * 1000  # Convert to ms
 
             if not times.empty:
-                report.append(f"### {approach}")
+                report.append(f"### {shorten_approach_name(approach)}")
                 report.append(f"- Mean: {times.mean():.2f}ms")
                 report.append(f"- Median: {times.median():.2f}ms")
                 report.append(f"- Min: {times.min():.2f}ms")

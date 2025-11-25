@@ -34,10 +34,32 @@ def load_all_results(results_dir: str = "results") -> pd.DataFrame:
     if not results_path.exists():
         return pd.DataFrame()
 
-    # Iterate through all run directories
+    # Collect all run directories (supporting both old and new structure)
+    # Old structure: results/run_*/
+    # New structure: results/hardware_type/run_*/
+    run_dirs = []
+
+    # First, check for hardware-specific folders (new structure)
+    for hardware_dir in sorted(results_path.iterdir()):
+        if hardware_dir.is_dir() and not hardware_dir.name.startswith("run_"):
+            # This is a hardware folder (e.g., h200, a100)
+            for run_dir in sorted(hardware_dir.glob("run_*"), reverse=True):
+                run_dirs.append((run_dir, hardware_dir.name))
+
+    # Also check for old-style run directories directly in results/ (backward compatibility)
     for run_dir in sorted(results_path.glob("run_*"), reverse=True):
-        # Load all JSON files in this run
+        run_dirs.append((run_dir, "unknown"))
+
+    # Sort by run directory name (timestamp) in reverse order
+    run_dirs = sorted(run_dirs, key=lambda x: x[0].name, reverse=True)
+
+    # Iterate through all run directories
+    for run_dir, hardware_type in run_dirs:
+        # Load all JSON files in this run (exclude profiler traces and test files)
         for json_file in sorted(run_dir.glob("*.json")):
+            # Skip profiler trace files and test files
+            if "profiler_trace" in json_file.name or "config_test" in json_file.name:
+                continue
             try:
                 with open(json_file) as f:
                     data = json.load(f)
@@ -74,14 +96,26 @@ def load_all_results(results_dir: str = "results") -> pd.DataFrame:
 
                 # Determine workload type from filename or config
                 filename = json_file.stem
-                if "decode" in filename:
+                if "decode" in filename.lower():
                     workload_type = "decode"
-                elif "prefill" in filename:
+                elif "prefill" in filename.lower():
                     workload_type = "prefill"
-                elif "mixed" in filename:
+                elif "mixed" in filename.lower():
                     workload_type = "mixed"
                 else:
-                    workload_type = "unknown"
+                    # Try to infer from scenario names if filename is ambiguous
+                    if scenarios and len(scenarios) > 0:
+                        first_scenario = scenarios[0].get("scenario_name", "")
+                        if "decode_b" in first_scenario.lower():
+                            workload_type = "decode"
+                        elif "prefill_b" in first_scenario.lower():
+                            workload_type = "prefill"
+                        elif "mixed_" in first_scenario.lower():
+                            workload_type = "mixed"
+                        else:
+                            workload_type = "unknown"
+                    else:
+                        workload_type = "unknown"
 
                 # Process each scenario
                 for scenario in scenarios:
@@ -110,6 +144,7 @@ def load_all_results(results_dir: str = "results") -> pd.DataFrame:
                     row = {
                         "run_id": run_dir.name,
                         "run_date": run_dir.name.replace("run_", ""),
+                        "hardware_type": hardware_type,
                         "model": model_name,
                         "tp_degree": tp_degree,
                         "timestamp": timestamp,
@@ -159,6 +194,53 @@ def load_all_results(results_dir: str = "results") -> pd.DataFrame:
             pass
 
     return df
+
+
+def deduplicate_scenarios(df: pd.DataFrame) -> pd.DataFrame:
+    """Deduplicate scenarios across runs by picking the run with most successful approaches.
+
+    For each unique scenario (identified by scenario_name, model, tp_degree, hardware_type, workload_type),
+    picks the run with the most non-null approach times. Tie-breaker: latest run_date.
+
+    Args:
+        df: DataFrame with all benchmark results
+
+    Returns:
+        DataFrame with deduplicated scenarios
+    """
+    if df.empty:
+        return df
+
+    # Get all approach columns (those ending with _mean, _median, etc.)
+    approach_mean_cols = [col for col in df.columns if col.endswith("_mean")]
+
+    if not approach_mean_cols:
+        # No approach columns found, return as-is
+        return df
+
+    # Add a column to count non-null approach times (successful approaches)
+    df = df.copy()
+    df["_num_successful_approaches"] = df[approach_mean_cols].notna().sum(axis=1)
+
+    # Group by unique scenario identifier
+    # Include hardware_type only if it exists in the DataFrame
+    group_cols = ["scenario_name", "model", "tp_degree", "workload_type"]
+    if "hardware_type" in df.columns:
+        group_cols.insert(3, "hardware_type")  # Insert after tp_degree
+
+    # For each group, pick the row with most successful approaches
+    # Tie-breaker: latest run_date (lexicographically largest)
+    deduped = (
+        df.sort_values(["_num_successful_approaches", "run_date"], ascending=[False, False])
+        .groupby(group_cols, dropna=False)
+        .first()
+        .reset_index()
+    )
+
+    # Drop the temporary column
+    deduped = deduped.drop(columns=["_num_successful_approaches"])
+
+    return deduped
 
 
 @st.cache_data
@@ -274,7 +356,7 @@ def apply_filters(df: pd.DataFrame, filters: Dict[str, Any]) -> pd.DataFrame:
         filtered = filtered[filtered["run_id"].isin(filters["runs"])]
 
     # Workload type filter
-    if filters.get("workload") and filters["workload"] != "All":
+    if filters.get("workload"):
         filtered = filtered[filtered["workload_type"] == filters["workload"]]
 
     # Model filter
@@ -284,6 +366,10 @@ def apply_filters(df: pd.DataFrame, filters: Dict[str, Any]) -> pd.DataFrame:
     # TP degree filter
     if filters.get("tp_degrees"):
         filtered = filtered[filtered["tp_degree"].isin(filters["tp_degrees"])]
+
+    # Hardware type filter (only if column exists)
+    if filters.get("hardware_types") and "hardware_type" in filtered.columns:
+        filtered = filtered[filtered["hardware_type"].isin(filters["hardware_types"])]
 
     # Batch size range
     if filters.get("batch_range"):
@@ -304,6 +390,11 @@ def apply_filters(df: pd.DataFrame, filters: Dict[str, Any]) -> pd.DataFrame:
     # CUDA graphs only
     if filters.get("cuda_graphs_only"):
         filtered = filtered[filtered["used_cuda_graphs"] == True]
+
+    # Apply deduplication (always on by default)
+    # Picks the run with most successful approaches for each unique scenario
+    if filters.get("deduplicate", True):
+        filtered = deduplicate_scenarios(filtered)
 
     return filtered
 

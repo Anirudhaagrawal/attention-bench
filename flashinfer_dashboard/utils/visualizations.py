@@ -6,232 +6,83 @@ import pandas as pd
 import numpy as np
 from typing import List, Dict, Any, Tuple
 
-
-# Color palette for approaches - pastel colors
-APPROACH_COLORS = {
-    "official_fa3": "#3498DB",                # Blue
-    "flashinfer_batch_attention": "#E74C3C",  # Red
-    "flashinfer_mixed_fa2": "#2ECC71",        # Green
-    "flashinfer_mixed_fa3": "#F39C12",        # Orange
-    "flashinfer_separated_fa2": "#9B59B6",    # Purple
-    "flashinfer_separated_fa3": "#1ABC9C",    # Teal
-    # Grouped approach colors
-    "fi2": "#2ECC71",                         # Green (same as mix2)
-    "fi3": "#F39C12",                         # Orange (same as mix3)
-    "fi_dec": "#9B59B6",                      # Purple (same as sep2)
-}
-
-# Approach groupings by workload type
-# For prefill: mix2==sep2 -> fi2, mix3==sep3 -> fi3
-# For decode: sep2==sep3 -> fi_dec
-APPROACH_GROUPS = {
-    "prefill": {
-        "fi2": ["flashinfer_mixed_fa2", "flashinfer_separated_fa2"],
-        "fi3": ["flashinfer_mixed_fa3", "flashinfer_separated_fa3"],
-    },
-    "decode": {
-        "fi_dec": ["flashinfer_separated_fa2", "flashinfer_separated_fa3"],
-    },
-}
+from .colors import (
+    APPROACH_COLORS,
+    APPROACH_GROUPS,
+    hex_to_rgb,
+    rgb_to_hex,
+    adjust_color_saturation,
+)
+from .formatting import shorten_approach_name, format_kv_length
+from .ui_components import build_approach_legend
+from .approach_grouping import apply_approach_grouping
 
 
-def shorten_approach_name(approach_name: str) -> str:
-    """Convert long approach names to short display names.
-
-    Args:
-        approach_name: Full approach name
-
-    Returns:
-        Shortened name
-    """
-    name_map = {
-        "official_fa3": "OFA3",
-        "flashinfer_batch_attention": "Batch",
-        "flashinfer_mixed_fa2": "Mix2",
-        "flashinfer_mixed_fa3": "Mix3",
-        "flashinfer_separated_fa2": "Sep2",
-        "flashinfer_separated_fa3": "Sep3",
-        # Grouped approaches
-        "fi2": "FI2",
-        "fi3": "FI3",
-        "fi_dec": "FI_Dec",
-    }
-    return name_map.get(approach_name, approach_name.replace("flashinfer_", "").title())
-
-
-def apply_approach_grouping(
-    df: pd.DataFrame,
-    workload_type: str,
-    approaches: List[str],
-    metric: str = "median"
-) -> Tuple[pd.DataFrame, List[str]]:
-    """Apply approach grouping based on workload type.
-
-    For prefill: fi2 = min(mix2, sep2), fi3 = min(mix3, sep3)
-    For decode: fi_dec = min(sep2, sep3)
-    For mixed: no grouping
-
-    Args:
-        df: DataFrame with benchmark results
-        workload_type: Type of workload ('prefill', 'decode', 'mixed')
-        approaches: List of original approach names
-        metric: Metric to use
-
-    Returns:
-        Tuple of (modified DataFrame, list of grouped approach names)
-    """
-    if workload_type not in APPROACH_GROUPS or workload_type == "mixed":
-        return df, approaches
-
-    df = df.copy()
-    groups = APPROACH_GROUPS[workload_type]
-    new_approaches = []
-    used_originals = set()
-
-    # Apply groupings
-    for group_name, members in groups.items():
-        # Check if we have data for any members
-        available_members = [m for m in members if f"{m}_{metric}" in df.columns]
-        if available_members:
-            # Create grouped column as min of available members
-            member_cols = [f"{m}_{metric}" for m in available_members]
-            df[f"{group_name}_{metric}"] = df[member_cols].min(axis=1)
-            new_approaches.append(group_name)
-            used_originals.update(members)
-
-    # Add ungrouped approaches that are still relevant
-    for approach in approaches:
-        if approach not in used_originals:
-            if f"{approach}_{metric}" in df.columns:
-                new_approaches.append(approach)
-
-    return df, new_approaches
-
-
-def format_kv_length(kv: int) -> str:
-    """Format KV length for display (e.g., 1024 → 1k)."""
-    if kv >= 1024 and kv % 1024 == 0:
-        return f"{kv // 1024}k"
-    return str(kv)
-
-
-def hex_to_rgb(hex_color: str) -> Tuple[int, int, int]:
-    """Convert hex color to RGB tuple."""
-    hex_color = hex_color.lstrip('#')
-    return tuple(int(hex_color[i:i+2], 16) for i in (0, 2, 4))
-
-
-def rgb_to_hex(rgb: Tuple[int, int, int]) -> str:
-    """Convert RGB tuple to hex color."""
-    return f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
-
-
-def adjust_color_saturation(hex_color: str, intensity: float) -> str:
-    """Adjust color brightness/saturation based on intensity.
-
-    Higher intensity = brighter, more vibrant color
-    Lower intensity = darker, more muted color
-
-    Args:
-        hex_color: Base color in hex format
-        intensity: Value between 0 and 1 (1 = full brightness)
-
-    Returns:
-        Adjusted color in hex format
-    """
-    r, g, b = hex_to_rgb(hex_color)
-
-    # Scale the color by intensity (lower intensity = darker)
-    # This creates a more visible gradient on dark backgrounds
-    new_r = int(r * intensity)
-    new_g = int(g * intensity)
-    new_b = int(b * intensity)
-
-    return rgb_to_hex((new_r, new_g, new_b))
-
-
-def create_speedup_heatmap(
+def create_speedup_heatmap_unified(
     df: pd.DataFrame,
     approach1: str,
     approach2: str,
     metric: str = "median",
-    workload_type: str = None
+    workload_type: str = None,
+    prefill_query: int = None,
+    prefill_kv: int = None
 ) -> go.Figure:
-    """Create interactive heatmap showing speedup between two approaches.
+    """Unified speedup heatmap for all workload types.
 
-    Shows rich cell annotations matching matplotlib heatmaps:
-    - Line 1: Speedup ratio (e.g., "1.25x")
-    - Line 2: Approach2 name + time
-    - Line 3: Approach1 name + time
+    Handles decode, prefill, and mixed workloads using WorkloadConfig.
 
     Args:
         df: DataFrame with benchmark results
         approach1: First approach name (baseline)
         approach2: Second approach name (comparison)
-        metric: Metric to use ('median', 'mean', etc.)
-        workload_type: Type of workload for approach grouping ('prefill', 'decode', 'mixed')
+        metric: Metric to use ('median', 'mean', etc.')
+        workload_type: Type of workload ('decode', 'prefill', 'mixed')
+        prefill_query: For mixed workloads, prefill query length to filter
+        prefill_kv: For mixed workloads, prefill KV length to filter
 
     Returns:
         Plotly Figure object
     """
-    # Filter out invalid data (batch_size=0 or kv_length=0)
-    df = df[(df['batch_size'] > 0) & (df['kv_length'] > 0)].copy()
+    from .heatmap_helpers import (
+        prepare_heatmap_data,
+        build_heatmap_grid,
+        build_hover_text_speedup,
+        generate_speedup_colorscale
+    )
 
-    # Detect workload type if not provided
-    if workload_type is None and 'workload_type' in df.columns:
-        workload_types = df['workload_type'].unique()
-        if len(workload_types) == 1:
-            workload_type = workload_types[0]
-
-    # Skip KV lengths 32 and 64 for prefill
-    if workload_type == "prefill":
-        df = df[~df['kv_length'].isin([32, 64])].copy()
-
-    # Apply approach grouping based on workload type
-    if workload_type and workload_type != "mixed":
-        df, grouped_approaches = apply_approach_grouping(
-            df, workload_type, [approach1, approach2], metric
+    # Prepare and filter data
+    try:
+        df_filtered, final_approaches, config = prepare_heatmap_data(
+            df, workload_type, [approach1, approach2], metric,
+            prefill_query, prefill_kv
         )
-        # Map original approach names to grouped names if they were grouped
-        approach1_mapped = approach1
-        approach2_mapped = approach2
-        for group_name, members in APPROACH_GROUPS.get(workload_type, {}).items():
-            if approach1 in members and group_name in grouped_approaches:
-                approach1_mapped = group_name
-            if approach2 in members and group_name in grouped_approaches:
-                approach2_mapped = group_name
-        approach1 = approach1_mapped
-        approach2 = approach2_mapped
-
-    if df.empty:
+        approach1, approach2 = final_approaches[0], final_approaches[1]
+    except ValueError as e:
+        # Handle missing prefill configuration
         fig = go.Figure()
-        fig.add_annotation(text="No valid data", x=0.5, y=0.5, showarrow=False)
+        fig.add_annotation(text=str(e), x=0.5, y=0.5, showarrow=False)
         return fig
 
-    # For prefill, use query_length for y-axis; for decode, use batch_size
-    if workload_type == "prefill" and 'query_length' in df.columns:
-        y_col = 'query_length'
-        y_label = "Query Tokens"
-    else:
-        y_col = 'batch_size'
-        y_label = "Batch Size"
+    if df_filtered.empty:
+        fig = go.Figure()
+        msg = "No data for this configuration" if config.is_mixed() else "No valid data"
+        fig.add_annotation(text=msg, x=0.5, y=0.5, showarrow=False)
+        return fig
 
-    # Get unique y values and KV lengths
-    y_values = sorted(df[y_col].unique())
-    kv_lengths = sorted(df['kv_length'].unique())
+    # Build coordinate grid
+    grid = build_heatmap_grid(df_filtered, config)
 
-    # Initialize matrices
-    speedup_matrix = np.full((len(y_values), len(kv_lengths)), np.nan)
-    hover_text = [['' for _ in kv_lengths] for _ in y_values]
+    # Initialize speedup matrix and cell data
+    speedup_matrix = np.full((len(grid.y_values), len(grid.x_values)), np.nan)
     cell_data = {}  # Store (speedup, time1, time2) for annotations
 
     short1 = shorten_approach_name(approach1)
     short2 = shorten_approach_name(approach2)
 
     # Calculate speedup for each cell
-    for i, y_val in enumerate(y_values):
-        for j, kv in enumerate(kv_lengths):
-            subset = df[(df[y_col] == y_val) & (df['kv_length'] == kv)]
+    for i, y_val in enumerate(grid.y_values):
+        for j, x_val in enumerate(grid.x_values):
+            subset = grid.get_subset(df_filtered, i, j, config)
 
             if not subset.empty:
                 col1 = f"{approach1}_{metric}"
@@ -246,55 +97,331 @@ def create_speedup_heatmap(
                         speedup_matrix[i, j] = speedup
                         cell_data[(i, j)] = (speedup, time1, time2)
 
-                        # Create hover text
-                        hover_text[i][j] = (
-                            f"{y_label}: {format_kv_length(y_val)}<br>"
-                            f"KV Length: {format_kv_length(kv)}<br>"
-                            f"Speedup: {speedup:.3f}x<br>"
-                            f"{short1}: {time1*1000:.2f}ms<br>"
-                            f"{short2}: {time2*1000:.2f}ms"
+                        # Create hover text using helper
+                        grid.hover_text[i][j] = build_hover_text_speedup(
+                            config, y_val, x_val, speedup, time1, time2,
+                            approach1, approach2
                         )
 
-    # Create heatmap
+    # Generate colorscale using helper
+    colorscale, zmin, zmax, tick_vals_filtered, tick_texts_filtered = generate_speedup_colorscale(speedup_matrix)
+    log_speedup_matrix = np.log(speedup_matrix)
+
+    # Create heatmap with log-scale colors
     fig = go.Figure(data=go.Heatmap(
-        z=speedup_matrix,
-        x=[format_kv_length(kv) for kv in kv_lengths],
-        y=[format_kv_length(y) for y in y_values],
-        colorscale='RdYlGn',
-        zmid=1.0,
-        hovertext=hover_text,
+        z=log_speedup_matrix,  # Use log values for color mapping
+        x=grid.x_labels,
+        y=grid.y_labels,
+        colorscale=colorscale,
+        zmid=0.0,  # log(1.0) = 0
+        zmin=zmin,
+        zmax=zmax,
+        hovertext=grid.hover_text,
         hoverinfo='text',
-        colorbar_title="Speedup",
         showscale=True,
+        colorbar=dict(
+            title="Speedup",
+            orientation='h',
+            y=-0.15,
+            yanchor='top',
+            thickness=15,
+            len=0.8,
+            tickmode='array',
+            tickvals=tick_vals_filtered,
+            ticktext=tick_texts_filtered,
+        ),
     ))
 
-    # Build text matrix for cell annotations instead of using annotations
-    # Winner (faster) shown first and bold
-    text_matrix = [['' for _ in kv_lengths] for _ in y_values]
+    # Build text matrix for cell annotations and count wins
+    text_matrix = [['' for _ in grid.x_values] for _ in grid.y_values]
+    approach1_wins = 0
+    approach2_wins = 0
+    ties = 0
+
     for (i, j), (speedup, time1, time2) in cell_data.items():
         time1_ms = time1 * 1000
         time2_ms = time2 * 1000
-        if time1 <= time2:
+        if abs(time1 - time2) / min(time1, time2) < 0.01:  # Within 1% = tie
+            ties += 1
+            text_matrix[i][j] = f"{short1}:{time1_ms:.0f}<br>{short2}:{time2_ms:.0f}<br>{speedup:.2f}x"
+        elif time1 < time2:
             # approach1 is winner (faster)
-            text_matrix[i][j] = f"{speedup:.2f}x<br><b>{short1}:{time1_ms:.0f}</b><br>{short2}:{time2_ms:.0f}"
+            approach1_wins += 1
+            text_matrix[i][j] = f"<b>{short1}:{time1_ms:.0f}</b><br>{short2}:{time2_ms:.0f}<br>{speedup:.2f}x"
         else:
             # approach2 is winner (faster)
-            text_matrix[i][j] = f"{speedup:.2f}x<br><b>{short2}:{time2_ms:.0f}</b><br>{short1}:{time1_ms:.0f}"
+            approach2_wins += 1
+            text_matrix[i][j] = f"<b>{short2}:{time2_ms:.0f}</b><br>{short1}:{time1_ms:.0f}<br>{speedup:.2f}x"
 
     # Update heatmap with text
     fig.data[0].text = text_matrix
     fig.data[0].texttemplate = "%{text}"
-    fig.data[0].textfont = dict(size=7)
+    fig.data[0].textfont = dict(size=12, family='Arial Black')
+
+    # Build title
+    if config.is_mixed():
+        title = (
+            f"Mixed Batch: {short1} vs {short2}<br>"
+            f"<sub>Prefill Query={format_kv_length(prefill_query)}, "
+            f"Prefill KV={format_kv_length(prefill_kv)} | "
+            f"Green: {short1} faster, Red: {short2} faster</sub>"
+        )
+    else:
+        title = (
+            f"Speedup: {short1} vs {short2}<br>"
+            f"<sub>Green: {short1} faster | Red: {short2} faster</sub>"
+        )
 
     fig.update_layout(
-        title=f"Speedup: {short1} vs {short2}<br><sub>Green: {short1} faster | Red: {short2} faster</sub>",
-        xaxis_title="KV Length",
-        yaxis_title=y_label,
+        title=title,
+        xaxis_title=config.x_axis_label,
+        yaxis_title=config.y_axis_label,
         xaxis=dict(type='category'),
         yaxis=dict(type='category', autorange='reversed'),
-        height=max(600, len(y_values) * 45 + 150),
+        height=max(600, len(grid.y_values) * 70 + 250),
         hovermode='closest',
         plot_bgcolor='white',
+        autosize=True,
+        uniformtext=dict(minsize=10, mode='show'),
+        font=dict(size=14),
+        margin=dict(l=50, r=10, t=80, b=80),
+    )
+
+    return fig
+
+
+def create_speedup_heatmap(
+    df: pd.DataFrame,
+    approach1: str,
+    approach2: str,
+    metric: str = "median",
+    workload_type: str = None
+) -> go.Figure:
+    """Create interactive heatmap showing speedup between two approaches.
+
+    Unified implementation for decode, prefill, and mixed workloads.
+
+    Args:
+        df: DataFrame with benchmark results
+        approach1: First approach name (baseline)
+        approach2: Second approach name (comparison)
+        metric: Metric to use ('median', 'mean', etc.)
+        workload_type: Type of workload for approach grouping ('prefill', 'decode', 'mixed')
+
+    Returns:
+        Plotly Figure object
+    """
+    return create_speedup_heatmap_unified(
+        df=df,
+        approach1=approach1,
+        approach2=approach2,
+        metric=metric,
+        workload_type=workload_type
+    )
+
+
+def create_best_performer_heatmap_unified(
+    df: pd.DataFrame,
+    approaches: List[str],
+    metric: str = "median",
+    workload_type: str = None,
+    prefill_query: int = None,
+    prefill_kv: int = None
+) -> go.Figure:
+    """Unified best performer heatmap for all workload types.
+
+    Shows rich cell annotations:
+    - Line 1: Winner name + time (e.g., "Mix3:234ms")
+    - Line 2: Runner-up name + time (e.g., "Sep3:267ms")
+    - Line 3: Speedup margin (e.g., "1.14x")
+
+    Color intensity varies based on margin of victory (speedup).
+
+    Args:
+        df: DataFrame with benchmark results
+        approaches: List of approach names to compare
+        metric: Metric to use ('median', 'mean', etc.')
+        workload_type: Type of workload ('decode', 'prefill', 'mixed')
+        prefill_query: For mixed workloads, the prefill query length to filter
+        prefill_kv: For mixed workloads, the prefill KV length to filter
+
+    Returns:
+        Plotly Figure object
+    """
+    from .heatmap_helpers import (
+        prepare_heatmap_data,
+        build_heatmap_grid,
+        generate_approach_colorscale
+    )
+
+    # Prepare and filter data
+    try:
+        df_filtered, approaches, config = prepare_heatmap_data(
+            df, workload_type, approaches, metric,
+            prefill_query, prefill_kv
+        )
+    except ValueError as e:
+        # Handle missing prefill configuration
+        fig = go.Figure()
+        fig.add_annotation(text=str(e), x=0.5, y=0.5, showarrow=False)
+        return fig
+
+    if df_filtered.empty:
+        fig = go.Figure()
+        fig.add_annotation(text="No valid data", x=0.5, y=0.5, showarrow=False)
+        return fig
+
+    # Build coordinate grid
+    grid = build_heatmap_grid(df_filtered, config)
+
+    # Initialize data structures
+    cell_data = {}  # Store (winner_name, winner_time, runner_name, runner_time, speedup) for each cell
+    z_matrix = [[None for _ in grid.x_values] for _ in grid.y_values]
+    text_matrix = [['' for _ in grid.x_values] for _ in grid.y_values]
+
+    # Create approach index mapping
+    approach_index = {approach: idx for idx, approach in enumerate(approaches)}
+
+    # Find best performer for each cell
+    for i, y_val in enumerate(grid.y_values):
+        for j, x_val in enumerate(grid.x_values):
+            subset = grid.get_subset(df_filtered, i, j, config)
+
+            if not subset.empty:
+                times = {}
+                for approach in approaches:
+                    col = f"{approach}_{metric}"
+                    if col in subset.columns:
+                        time = subset[col].iloc[0]
+                        if pd.notna(time) and time > 0:
+                            times[approach] = time
+
+                if len(times) >= 2:
+                    # Sort by time (fastest first)
+                    sorted_times = sorted(times.items(), key=lambda x: x[1])
+                    winner_name, winner_time = sorted_times[0]
+                    runner_name, runner_time = sorted_times[1]
+                    speedup = runner_time / winner_time
+
+                    cell_data[(i, j)] = (winner_name, winner_time, runner_name, runner_time, speedup)
+
+                    # Calculate intensity based on margin of victory
+                    # intensity: 0.4 at speedup=1.0, up to 1.0 at speedup>=1.5
+                    intensity = min(1.0, 0.4 + (speedup - 1.0) * 1.2)
+
+                    # Encode winner + intensity in z-value
+                    # z = approach_index + (intensity - 0.4) / 0.6
+                    # Maps intensity [0.4, 1.0] to range [approach_index, approach_index + 0.999]
+                    winner_idx = approach_index[winner_name]
+                    z_matrix[i][j] = winner_idx + (intensity - 0.4) / 0.6
+
+                    # Build text annotation
+                    winner_ms = winner_time * 1000
+                    runner_ms = runner_time * 1000
+                    short_winner = shorten_approach_name(winner_name)
+                    short_runner = shorten_approach_name(runner_name)
+                    text_matrix[i][j] = f"<b>{short_winner}:{winner_ms:.0f}</b><br>{short_runner}:{runner_ms:.0f}<br>{speedup:.2f}x"
+
+                    # Create hover text
+                    hover_lines = [
+                        f"{config.y_axis_label}: {config.format_y_axis_value(y_val)}",
+                        f"{config.x_axis_label}: {config.format_x_axis_value(x_val)}",
+                        f"<br><b>Winner: {shorten_approach_name(winner_name)} ({winner_time*1000:.2f}ms)</b><br>"
+                    ]
+                    for rank, (app, time) in enumerate(sorted_times, 1):
+                        hover_lines.append(
+                            f"{rank}. {shorten_approach_name(app)}: {time*1000:.2f}ms"
+                        )
+                    grid.hover_text[i][j] = "<br>".join(hover_lines)
+
+                elif len(times) == 1:
+                    winner_name, winner_time = list(times.items())[0]
+                    cell_data[(i, j)] = (winner_name, winner_time, None, None, 1.0)
+
+                    # No margin, use moderate intensity (0.6)
+                    winner_idx = approach_index[winner_name]
+                    z_matrix[i][j] = winner_idx + (0.6 - 0.4) / 0.6
+
+                    winner_ms = winner_time * 1000
+                    short_winner = shorten_approach_name(winner_name)
+                    text_matrix[i][j] = f"<b>{short_winner}:{winner_ms:.0f}</b>"
+
+                    grid.hover_text[i][j] = f"{config.y_axis_label}: {config.format_y_axis_value(y_val)}<br>{config.x_axis_label}: {config.format_x_axis_value(x_val)}<br>{shorten_approach_name(winner_name)}: {winner_time*1000:.2f}ms"
+
+    # Generate colorscale using helper
+    colorscale = generate_approach_colorscale(approaches)
+
+    # Create figure with native Heatmap
+    fig = go.Figure(data=go.Heatmap(
+        z=z_matrix,
+        x=grid.x_labels,
+        y=grid.y_labels,
+        colorscale=colorscale,
+        # Z-values encode: approach_index + intensity_fraction (range: 0 to n_approaches)
+        # Explicit zmin/zmax ensures correct mapping to colorscale segments
+        zmin=0,
+        zmax=len(approaches),
+        showscale=False,  # Hide colorbar (colors represent categories)
+        text=text_matrix,
+        texttemplate="%{text}",
+        textfont=dict(size=12, color='white', family='Arial Black'),
+        hovertext=grid.hover_text,
+        hoverinfo='text',
+    ))
+
+    # Count wins per approach
+    from collections import Counter
+    winner_counts = Counter()
+    for (i, j), (winner_name, _, _, _, _) in cell_data.items():
+        winner_counts[winner_name] += 1
+
+    # Build winner statistics string
+    total_cells = len(cell_data)
+    winner_stats = []
+    for approach in approaches:
+        count = winner_counts.get(approach, 0)
+        pct = 100 * count / total_cells if total_cells > 0 else 0
+        short_name = shorten_approach_name(approach)
+        winner_stats.append(f"{short_name}: {count} ({pct:.1f}%)")
+
+    winner_stats_str = " | ".join(winner_stats)
+
+    # Create legend for approaches
+    legend_text = " | ".join([f"{shorten_approach_name(app)}" for app in approaches])
+
+    # Build color legend using helper function
+    legend_shapes, legend_annotations = build_approach_legend(
+        approaches,
+        y_position=-0.12,
+        rect_height=0.03,  # Larger boxes for better visibility
+        rect_width=0.03
+    )
+
+    # Build title based on workload type
+    if config.is_mixed():
+        title = f"Best Performer ({len(approaches)} approaches)<br><sub>Prefill Query={format_kv_length(prefill_query)}, Prefill KV={format_kv_length(prefill_kv)} | {legend_text}</sub>"
+    else:
+        title = f"Best Performer ({len(approaches)} approaches)<br><sub>{legend_text}</sub>"
+
+    fig.update_layout(
+        title=title,
+        xaxis_title=config.x_axis_label,
+        yaxis_title=config.y_axis_label,
+        xaxis=dict(
+            type='category',
+            side='bottom',
+        ),
+        yaxis=dict(
+            type='category',
+            autorange='reversed',  # Smallest values at top
+        ),
+        height=max(600, len(grid.y_values) * 70 + 200),
+        hovermode='closest',
+        plot_bgcolor='white',
+        autosize=True,
+        font=dict(size=14),
+        shapes=legend_shapes,
+        annotations=legend_annotations,
     )
 
     return fig
@@ -324,181 +451,12 @@ def create_best_performer_heatmap(
     Returns:
         Plotly Figure object
     """
-    # Filter out invalid data (batch_size=0 or kv_length=0)
-    df = df[(df['batch_size'] > 0) & (df['kv_length'] > 0)].copy()
-
-    # Detect workload type if not provided
-    if workload_type is None and 'workload_type' in df.columns:
-        workload_types = df['workload_type'].unique()
-        if len(workload_types) == 1:
-            workload_type = workload_types[0]
-
-    # Skip KV lengths 32 and 64 for prefill
-    if workload_type == "prefill":
-        df = df[~df['kv_length'].isin([32, 64])].copy()
-
-    # Apply approach grouping based on workload type
-    if workload_type and workload_type != "mixed":
-        df, approaches = apply_approach_grouping(df, workload_type, approaches, metric)
-
-    if df.empty:
-        fig = go.Figure()
-        fig.add_annotation(text="No valid data", x=0.5, y=0.5, showarrow=False)
-        return fig
-
-    # For prefill, use query_length for y-axis; for decode, use batch_size
-    if workload_type == "prefill" and 'query_length' in df.columns:
-        y_col = 'query_length'
-        y_label = "Query Tokens"
-    else:
-        y_col = 'batch_size'
-        y_label = "Batch Size"
-
-    # Get unique y values and KV lengths
-    y_values = sorted(df[y_col].unique())
-    kv_lengths = sorted(df['kv_length'].unique())
-
-    # Initialize data structures
-    cell_data = {}  # Store (winner_name, winner_time, runner_name, runner_time, speedup) for each cell
-    hover_text = [['' for _ in kv_lengths] for _ in y_values]
-    cell_colors = [[None for _ in kv_lengths] for _ in y_values]
-
-    # Find best performer for each cell
-    for i, y_val in enumerate(y_values):
-        for j, kv in enumerate(kv_lengths):
-            subset = df[(df[y_col] == y_val) & (df['kv_length'] == kv)]
-
-            if not subset.empty:
-                times = {}
-                for approach in approaches:
-                    col = f"{approach}_{metric}"
-                    if col in subset.columns:
-                        time = subset[col].iloc[0]
-                        if pd.notna(time) and time > 0:
-                            times[approach] = time
-
-                if len(times) >= 2:
-                    # Sort by time (fastest first)
-                    sorted_times = sorted(times.items(), key=lambda x: x[1])
-                    winner_name, winner_time = sorted_times[0]
-                    runner_name, runner_time = sorted_times[1]
-                    speedup = runner_time / winner_time
-
-                    cell_data[(i, j)] = (winner_name, winner_time, runner_name, runner_time, speedup)
-
-                    # Calculate color with intensity based on margin of victory
-                    # intensity: 0.3 at speedup=1.0, up to 1.0 at speedup>=2.0
-                    intensity = min(1.0, 0.3 + (speedup - 1.0) * 0.7)
-                    base_color = APPROACH_COLORS.get(winner_name, "#808080")
-                    cell_colors[i][j] = adjust_color_saturation(base_color, intensity)
-
-                    # Create hover text
-                    hover_lines = [
-                        f"{y_label}: {format_kv_length(y_val)}",
-                        f"KV Length: {format_kv_length(kv)}",
-                        f"<br><b>Winner: {shorten_approach_name(winner_name)} ({winner_time*1000:.2f}ms)</b><br>"
-                    ]
-                    for rank, (app, time) in enumerate(sorted_times, 1):
-                        hover_lines.append(
-                            f"{rank}. {shorten_approach_name(app)}: {time*1000:.2f}ms"
-                        )
-                    hover_text[i][j] = "<br>".join(hover_lines)
-
-                elif len(times) == 1:
-                    winner_name, winner_time = list(times.items())[0]
-                    cell_data[(i, j)] = (winner_name, winner_time, None, None, 1.0)
-                    # No margin, use base intensity
-                    base_color = APPROACH_COLORS.get(winner_name, "#808080")
-                    cell_colors[i][j] = adjust_color_saturation(base_color, 0.3)
-                    hover_text[i][j] = f"{y_label}: {format_kv_length(y_val)}<br>KV: {format_kv_length(kv)}<br>{shorten_approach_name(winner_name)}: {winner_time*1000:.2f}ms"
-
-    # Create figure with shapes for colored cells
-    fig = go.Figure()
-
-    # Add invisible scatter for hover info at cell centers
-    x_labels = [format_kv_length(kv) for kv in kv_lengths]
-    y_tick_labels = [format_kv_length(y) for y in y_values]
-
-    # Add shapes (rectangles) for each cell with the computed color
-    shapes = []
-    for i in range(len(y_values)):
-        for j in range(len(kv_lengths)):
-            if cell_colors[i][j] is not None:
-                shapes.append(dict(
-                    type="rect",
-                    x0=j - 0.5,
-                    x1=j + 0.5,
-                    y0=i - 0.5,
-                    y1=i + 0.5,
-                    fillcolor=cell_colors[i][j],
-                    line=dict(color="white", width=1),
-                    layer="below",
-                ))
-
-    # Build text and hover data for scatter
-    scatter_x = []
-    scatter_y = []
-    scatter_text = []
-    scatter_hover = []
-
-    for i in range(len(y_values)):
-        for j in range(len(kv_lengths)):
-            scatter_x.append(j)
-            scatter_y.append(i)
-            scatter_hover.append(hover_text[i][j])
-
-            if (i, j) in cell_data:
-                winner_name, winner_time, runner_name, runner_time, speedup = cell_data[(i, j)]
-                winner_ms = winner_time * 1000
-                short_winner = shorten_approach_name(winner_name)
-
-                if runner_name:
-                    runner_ms = runner_time * 1000
-                    short_runner = shorten_approach_name(runner_name)
-                    scatter_text.append(f"{short_winner}:{winner_ms:.0f}<br>{short_runner}:{runner_ms:.0f}<br>{speedup:.2f}x")
-                else:
-                    scatter_text.append(f"{short_winner}:{winner_ms:.0f}")
-            else:
-                scatter_text.append("")
-
-    # Add scatter trace for text labels and hover
-    fig.add_trace(go.Scatter(
-        x=scatter_x,
-        y=scatter_y,
-        mode='text',
-        text=scatter_text,
-        textfont=dict(size=7, color='white'),
-        hovertext=scatter_hover,
-        hoverinfo='text',
-        showlegend=False,
-    ))
-
-    # Create legend for approaches
-    legend_text = " | ".join([f"{shorten_approach_name(app)}" for app in approaches])
-
-    fig.update_layout(
-        title=f"Best Performer ({len(approaches)} approaches)<br><sub>{legend_text}</sub>",
-        xaxis_title="KV Length",
-        yaxis_title=y_label,
-        xaxis=dict(
-            tickmode='array',
-            tickvals=list(range(len(kv_lengths))),
-            ticktext=x_labels,
-            range=[-0.5, len(kv_lengths) - 0.5],
-        ),
-        yaxis=dict(
-            tickmode='array',
-            tickvals=list(range(len(y_values))),
-            ticktext=y_tick_labels,
-            range=[len(y_values) - 0.5, -0.5],  # Reversed: smallest values at top
-        ),
-        shapes=shapes,
-        height=max(600, len(y_values) * 45 + 150),
-        hovermode='closest',
-        plot_bgcolor='#2d2d2d',
+    return create_best_performer_heatmap_unified(
+        df=df,
+        approaches=approaches,
+        metric=metric,
+        workload_type=workload_type
     )
-
-    return fig
 
 
 def create_performance_bar_chart(
@@ -679,6 +637,73 @@ def create_approach_comparison_table(
     return pd.DataFrame(comparison)
 
 
+def create_mixed_heatmap(
+    df: pd.DataFrame,
+    approach1: str,
+    approach2: str,
+    prefill_query: int,
+    prefill_kv: int,
+    metric: str = "median"
+) -> go.Figure:
+    """Create heatmap for mixed workloads showing decode performance.
+
+    Wrapper around create_speedup_heatmap_unified for mixed workloads.
+
+    Args:
+        df: DataFrame with mixed benchmark results
+        approach1: First approach name (baseline)
+        approach2: Second approach name (comparison)
+        prefill_query: Prefill query length to filter
+        prefill_kv: Prefill KV length to filter
+        metric: Metric to use ('median', 'mean', etc.')
+
+    Returns:
+        Plotly Figure object
+    """
+    return create_speedup_heatmap_unified(
+        df=df,
+        approach1=approach1,
+        approach2=approach2,
+        metric=metric,
+        workload_type="mixed",
+        prefill_query=prefill_query,
+        prefill_kv=prefill_kv
+    )
+
+
+def create_mixed_best_performer_heatmap(
+    df: pd.DataFrame,
+    approaches: List[str],
+    prefill_query: int,
+    prefill_kv: int,
+    metric: str = "median"
+) -> go.Figure:
+    """Create best performer heatmap for mixed workloads.
+
+    For a given prefill configuration (query, kv), shows which approach wins:
+    - X-axis: decode KV length
+    - Y-axis: decode batch size
+
+    Args:
+        df: DataFrame with mixed benchmark results
+        approaches: List of approach names to compare
+        prefill_query: Prefill query length to filter
+        prefill_kv: Prefill KV length to filter
+        metric: Metric to use ('median', 'mean', etc.')
+
+    Returns:
+        Plotly Figure object
+    """
+    return create_best_performer_heatmap_unified(
+        df=df,
+        approaches=approaches,
+        metric=metric,
+        workload_type="mixed",
+        prefill_query=prefill_query,
+        prefill_kv=prefill_kv
+    )
+
+
 def create_workload_category_chart(
     df: pd.DataFrame,
     approaches: List[str],
@@ -726,5 +751,175 @@ def create_workload_category_chart(
         height=450,
         plot_bgcolor='white',
     )
+
+    return fig
+
+
+def create_line_graph(
+    df: pd.DataFrame,
+    workload_type: str,
+    selected_approaches: List[str],
+    selected_dimension_values: List[int],
+    metric: str = "median",
+    y_scale: str = "log"
+) -> go.Figure:
+    """Create line graph showing latency vs KV cache length.
+
+    Args:
+        df: DataFrame with benchmark results
+        workload_type: 'decode' or 'prefill'
+        selected_approaches: List of approaches to plot
+        selected_dimension_values: List of batch sizes (decode) or query lengths (prefill)
+        metric: Metric to use ('median', 'mean', etc.')
+        y_scale: Y-axis scale type ('log' or 'linear'), default 'log'
+
+    Returns:
+        Plotly Figure object with line graph
+    """
+    # Apply approach grouping
+    df_filtered, grouped_approaches = apply_approach_grouping(df, workload_type, selected_approaches, metric)
+
+    # Determine dimension column
+    if workload_type == "decode":
+        dimension_col = "batch_size"
+        dimension_label = "Batch"
+    elif workload_type == "prefill":
+        dimension_col = "query_length"
+        dimension_label = "Query"
+    else:
+        raise ValueError(f"Unsupported workload_type: {workload_type}")
+
+    # Filter by selected dimension values
+    df_plot = df_filtered[df_filtered[dimension_col].isin(selected_dimension_values)].copy()
+
+    # Skip KV lengths 32 and 64 for prefill (these are decode cache sizes)
+    if workload_type == "prefill":
+        df_plot = df_plot[~df_plot['kv_length'].isin([32, 64])].copy()
+
+    if df_plot.empty:
+        fig = go.Figure()
+        fig.add_annotation(text="No data for selected filters", x=0.5, y=0.5, showarrow=False)
+        return fig
+
+    # Get unique KV lengths (x-axis)
+    kv_lengths = sorted(df_plot['kv_length'].unique())
+
+    # Create figure
+    fig = go.Figure()
+
+    # Plot lines for each (approach, dimension_value) combination
+    for approach in grouped_approaches:
+        col = f"{approach}_{metric}"
+        if col not in df_plot.columns:
+            continue
+
+        for dim_value in selected_dimension_values:
+            # Filter for this combination
+            subset = df_plot[df_plot[dimension_col] == dim_value]
+
+            if subset.empty:
+                continue
+
+            # Collect (kv, latency) pairs
+            x_vals = []
+            y_vals = []
+
+            for kv in kv_lengths:
+                kv_subset = subset[subset['kv_length'] == kv]
+                if not kv_subset.empty and col in kv_subset.columns:
+                    latency = kv_subset[col].iloc[0]
+                    if pd.notna(latency):
+                        x_vals.append(kv)
+                        y_vals.append(latency * 1000)  # Convert to ms
+
+            if not x_vals:
+                continue
+
+            # Create line
+            color = APPROACH_COLORS.get(approach, "#808080")
+            line_name = f"{shorten_approach_name(approach)} ({dimension_label}={format_kv_length(dim_value)})"
+
+            # Prepare customdata for formatted KV lengths in hover
+            customdata = [format_kv_length(kv) for kv in x_vals]
+
+            fig.add_trace(go.Scatter(
+                x=x_vals,  # Use numeric values for proper positioning
+                y=y_vals,
+                mode='lines+markers',
+                name=line_name,
+                line=dict(color=color, width=2),
+                marker=dict(size=6, color=color),
+                customdata=customdata,
+                hovertemplate=(
+                    f"<b>{line_name}</b><br>"
+                    "KV Length: %{customdata}<br>"  # Use formatted value from customdata
+                    "Latency: %{y:.2f}ms<br>"
+                    "<extra></extra>"
+                )
+            ))
+
+    # Update layout
+    fig.update_layout(
+        title=f"{workload_type.title()} Latency vs KV Cache Length",
+        xaxis_title="KV Cache Length",
+        yaxis_title="Latency (ms)",
+        height=600,
+        margin=dict(l=50, r=10, t=80, b=80),
+        plot_bgcolor='white',
+        hovermode='closest',
+        legend=dict(
+            orientation="v",
+            yanchor="top",
+            y=1.0,
+            xanchor="left",
+            x=1.02
+        )
+    )
+
+    # Format axes
+    fig.update_xaxes(
+        type="log",  # Log scale for better visualization across orders of magnitude
+        showgrid=True,
+        gridwidth=1,
+        gridcolor='lightgray',
+        tickmode='array',
+        tickvals=kv_lengths,  # Position ticks at actual KV values
+        ticktext=[format_kv_length(kv) for kv in kv_lengths]  # Show formatted labels
+    )
+    # Format y-axis based on scale type
+    if y_scale == "log":
+        # For log scale, use nice round tick values
+        # Collect all y values to determine range
+        all_y_vals = []
+        for trace in fig.data:
+            all_y_vals.extend([y for y in trace.y if y is not None and y > 0])
+
+        if all_y_vals:
+            import math
+            min_y = min(all_y_vals)
+            max_y = max(all_y_vals)
+
+            # Generate tick values at powers of 10
+            min_exp = math.floor(math.log10(min_y))
+            max_exp = math.ceil(math.log10(max_y))
+
+            tick_vals = []
+            for exp in range(min_exp, max_exp + 1):
+                tick_vals.append(10**exp)
+
+            fig.update_yaxes(
+                type="log",
+                tickmode='array',
+                tickvals=tick_vals,
+                ticktext=[f"{v:.3g}" for v in tick_vals],  # Format as 0.1, 1, 10, 100, etc.
+                showgrid=True,
+                gridwidth=1,
+                gridcolor='lightgray'
+            )
+        else:
+            fig.update_yaxes(type="log", showgrid=True, gridwidth=1, gridcolor='lightgray')
+    else:
+        # Linear scale - default formatting is fine
+        fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='lightgray')
 
     return fig

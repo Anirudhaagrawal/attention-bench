@@ -123,17 +123,53 @@ def calculate_heads_for_tp(model_config: Dict, tp_degree: int) -> Dict:
     return config
 
 
-def create_timestamped_output_dir(base_dir: str) -> str:
-    """Create a timestamped output directory.
+def detect_hardware_type() -> str:
+    """Auto-detect hardware type from GPU device name.
+
+    Returns:
+        Normalized hardware type string (e.g., "h200", "a100", "h100")
+    """
+    import torch
+    if not torch.cuda.is_available():
+        return "unknown"
+
+    device_name = torch.cuda.get_device_name(0).lower()
+
+    # Normalize common GPU types
+    if "h200" in device_name:
+        return "h200"
+    elif "a100" in device_name:
+        return "a100"
+    elif "h100" in device_name:
+        return "h100"
+    elif "a6000" in device_name:
+        return "a6000"
+    elif "v100" in device_name:
+        return "v100"
+    else:
+        # For unknown GPUs, use a safe string (remove spaces, special chars)
+        import re
+        safe_name = re.sub(r'[^a-z0-9]', '_', device_name)
+        return safe_name[:20]  # Truncate to reasonable length
+
+
+def create_timestamped_output_dir(base_dir: str, hardware_type: str = None) -> str:
+    """Create a timestamped output directory organized by hardware type.
 
     Args:
         base_dir: Base results directory
+        hardware_type: Hardware type (e.g., "h200", "a100"). If None, auto-detected.
 
     Returns:
-        Path to timestamped directory
+        Path to timestamped directory (e.g., results/h200/run_2025-11-23_12-09-34)
     """
+    if hardware_type is None:
+        hardware_type = detect_hardware_type()
+
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    output_dir = os.path.join(base_dir, f"run_{timestamp}")
+    # Create hardware-specific subdirectory
+    hardware_dir = os.path.join(base_dir, hardware_type)
+    output_dir = os.path.join(hardware_dir, f"run_{timestamp}")
     os.makedirs(output_dir, exist_ok=True)
     return output_dir
 
@@ -196,7 +232,8 @@ def run_benchmark_for_model_tp(
     memory_util: float,
     memory_overhead: float,
     output_dir: str,
-    scenario_gen_config: Dict
+    scenario_gen_config: Dict,
+    worker_recreation_interval: int = 100
 ) -> Tuple[List[Dict], int, int, List]:
     """Run benchmarks for a single (model, TP) combination.
 
@@ -266,6 +303,9 @@ def run_benchmark_for_model_tp(
     scenario_queue = list(feasible)
     pending = {}
 
+    # Track scenarios completed per worker for periodic recreation
+    worker_scenario_counts = {i: 0 for i in range(num_gpus)}
+
     # Initial fill
     initial_count = min(num_gpus, len(scenario_queue))
     for i in range(initial_count):
@@ -280,6 +320,8 @@ def run_benchmark_for_model_tp(
         pending[promise] = (scenario_name, i)
 
     print(f"Started {initial_count} initial tasks...")
+    if worker_recreation_interval > 0:
+        print(f"Worker recreation enabled: every {worker_recreation_interval} scenarios per worker")
 
     # Track workers that need recreation due to CUDA errors
     corrupted_workers = set()
@@ -311,45 +353,63 @@ def run_benchmark_for_model_tp(
             time_str = "SKIPPED" if result.get('skipped_reason') else "OK"
             print(f"  [{len(results)}/{len(feasible)}] {scenario_name}: {time_str}")
 
+            # Increment scenario count for this worker
+            worker_scenario_counts[worker_id] += 1
+
+            # Check if worker needs periodic recreation
+            needs_periodic_recreation = (
+                worker_recreation_interval > 0 and
+                worker_scenario_counts[worker_id] >= worker_recreation_interval and
+                worker_id not in corrupted_workers
+            )
+
             # Check if worker encountered CUDA error (illegal memory, etc.)
             # These errors corrupt the CUDA context - worker must be recreated
-            if result.get('skipped_reason') and 'illegal' in result.get('skipped_reason', '').lower():
-                if worker_id not in corrupted_workers:
+            has_cuda_error = result.get('skipped_reason') and 'illegal' in result.get('skipped_reason', '').lower()
+
+            # Recreate worker if needed (either CUDA error or periodic recreation)
+            if has_cuda_error or needs_periodic_recreation:
+                if has_cuda_error and worker_id not in corrupted_workers:
                     print(f"    WARNING: Worker {worker_id} encountered CUDA error - recreating...")
                     corrupted_workers.add(worker_id)
+                elif needs_periodic_recreation:
+                    print(f"    INFO: Worker {worker_id} reached {worker_scenario_counts[worker_id]} scenarios - periodic recreation...")
 
-                    # Kill corrupted worker
-                    try:
-                        ray.kill(workers[worker_id])
-                    except:
-                        pass
+                # Kill worker
+                try:
+                    ray.kill(workers[worker_id])
+                except:
+                    pass
 
-                    # Wait for GPU context to fully clean up
-                    time.sleep(2)
+                # Wait for GPU context to fully clean up
+                time.sleep(2)
 
-                    # Create new worker with same config
-                    import tempfile
-                    temp_config = {
-                        "model": tp_model_config,
-                        "profiling": {"num_warmup_iters": 5, "num_active_iters": 50},
-                        "output": {"results_dir": output_dir, "plots_dir": "plots"},
-                        "scenario_generation": scenario_gen_config
-                    }
-                    with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
-                        yaml.dump(temp_config, f)
-                        temp_config_path = f.name
+                # Create new worker with same config
+                import tempfile
+                temp_config = {
+                    "model": tp_model_config,
+                    "profiling": {"num_warmup_iters": 5, "num_active_iters": 50},
+                    "output": {"results_dir": output_dir, "plots_dir": "plots"},
+                    "scenario_generation": scenario_gen_config
+                }
+                with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
+                    yaml.dump(temp_config, f)
+                    temp_config_path = f.name
 
-                    try:
-                        workers[worker_id] = BenchmarkWorker.remote(temp_config_path)
+                try:
+                    workers[worker_id] = BenchmarkWorker.remote(temp_config_path)
+                    if has_cuda_error:
                         corrupted_workers.remove(worker_id)
-                        print(f"    Worker {worker_id} recreated successfully")
-                        # Note: temp_config_path left in /tmp for worker to read
-                        # It will be cleaned up on system reboot
-                    except Exception as e:
-                        print(f"    ERROR: Failed to recreate worker {worker_id}: {e}")
-                        print(f"    Worker {worker_id} will remain unavailable")
-                        # Clean up temp file only if worker creation failed
-                        os.unlink(temp_config_path)
+                    # Reset scenario count for recreated worker
+                    worker_scenario_counts[worker_id] = 0
+                    print(f"    Worker {worker_id} recreated successfully")
+                    # Note: temp_config_path left in /tmp for worker to read
+                    # It will be cleaned up on system reboot
+                except Exception as e:
+                    print(f"    ERROR: Failed to recreate worker {worker_id}: {e}")
+                    print(f"    Worker {worker_id} will remain unavailable")
+                    # Clean up temp file only if worker creation failed
+                    os.unlink(temp_config_path)
 
             if scenario_queue:
                 next_name, next_config = scenario_queue.pop(0)
@@ -423,10 +483,12 @@ def main():
     parser = argparse.ArgumentParser(description="Ray-based FlashInfer Benchmark with Multi-Model/TP support")
     parser.add_argument("--config", type=str, required=True, help="Path to config file")
     parser.add_argument("--num-gpus", type=int, default=1, help="Number of GPUs to use")
-    parser.add_argument("--memory-utilization", type=float, default=0.90,
-                       help="GPU memory utilization threshold (default: 0.90)")
-    parser.add_argument("--memory-overhead", type=float, default=1.1,
-                       help="Memory overhead multiplier (default: 1.1)")
+    parser.add_argument("--memory-utilization", type=float, default=0.8,
+                       help="GPU memory utilization threshold (default: 0.8)")
+    parser.add_argument("--memory-overhead", type=float, default=1.4,
+                       help="Memory overhead multiplier (default: 1.4)")
+    parser.add_argument("--worker-recreation-interval", type=int, default=100,
+                       help="Recreate workers after N scenarios to prevent state accumulation (default: 100, 0=disable)")
     parser.add_argument("--approaches", type=str, help="Comma-separated list of approaches")
     parser.add_argument("--models", type=str, help="Comma-separated list of models (default: all)")
     parser.add_argument("--tp-degrees", type=str, help="Comma-separated list of TP degrees (default: all)")
@@ -449,6 +511,11 @@ def main():
         # Get scenario generation config for workers
         scenario_gen_config = config_data.get("scenario_generation", {})
 
+        # Get memory settings from config (can be overridden by CLI args)
+        memory_config = config_data.get("memory", {})
+        memory_utilization = args.memory_utilization if args.memory_utilization != 0.8 else memory_config.get("memory_utilization", 0.8)
+        memory_overhead = args.memory_overhead if args.memory_overhead != 1.4 else memory_config.get("memory_overhead", 1.4)
+
         # Override approaches if specified
         if args.approaches:
             approaches = [a.strip() for a in args.approaches.split(",")]
@@ -465,16 +532,22 @@ def main():
 
         print(f"Config: {args.config}")
         print(f"Total scenarios: {len(scenarios)}")
+        # Detect hardware type
+        hardware_type = detect_hardware_type()
+        print(f"Hardware: {hardware_type.upper()}")
+
         print(f"Models: {', '.join([m.get('name', k) for k, m in models.items()])}")
         print(f"TP degrees: {', '.join(map(str, tp_degrees))}")
         print(f"Approaches: {', '.join(approaches)}")
         print(f"GPUs: {args.num_gpus}")
-        print(f"Memory utilization: {args.memory_utilization * 100:.0f}%")
-        print(f"Memory overhead: {args.memory_overhead}x")
+        print(f"Memory utilization: {memory_utilization * 100:.0f}%")
+        print(f"Memory overhead: {memory_overhead}x")
+        if args.worker_recreation_interval > 0:
+            print(f"Worker recreation interval: every {args.worker_recreation_interval} scenarios")
 
-        # Create timestamped output directory
+        # Create timestamped output directory with hardware-specific folder
         base_results_dir = output_config.get("results_dir", "results")
-        timestamped_dir = create_timestamped_output_dir(base_results_dir)
+        timestamped_dir = create_timestamped_output_dir(base_results_dir, hardware_type)
         print(f"\nOutput directory: {timestamped_dir}")
 
         # Extract config name (without path and extension)
@@ -500,10 +573,11 @@ def main():
                         variants=variants,
                         approaches=approaches,
                         num_gpus=args.num_gpus,
-                        memory_util=args.memory_utilization,
-                        memory_overhead=args.memory_overhead,
+                        memory_util=memory_utilization,
+                        memory_overhead=memory_overhead,
                         output_dir=timestamped_dir,
-                        scenario_gen_config=scenario_gen_config
+                        scenario_gen_config=scenario_gen_config,
+                        worker_recreation_interval=args.worker_recreation_interval
                     )
 
                     all_summaries.append({

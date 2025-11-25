@@ -10,7 +10,7 @@ import json
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from utils import (
-    load_all_results,
+    get_cached_data,
     get_available_runs,
     get_run_metadata,
     apply_filters,
@@ -25,22 +25,14 @@ st.set_page_config(
     page_title="Explorer - Attention Bench",
     page_icon="🔍",
     layout="wide",
+    initial_sidebar_state="collapsed",
 )
 
 st.title("🔍 Data Explorer")
 st.caption("Browse and search raw benchmark data")
 
 # Load data
-@st.cache_data
-def get_data():
-    results_paths = ["results", "../results", Path(__file__).parent.parent.parent / "results"]
-    for path in results_paths:
-        df = load_all_results(str(path))
-        if not df.empty:
-            return df, str(path)
-    return load_all_results("results"), "results"
-
-df, results_path = get_data()
+df, results_path = get_cached_data(return_path=True)
 
 if df.empty:
     st.warning("No benchmark results found.")
@@ -75,7 +67,7 @@ with st.sidebar:
 
     workload_filter = st.selectbox(
         "Workload Type",
-        options=["All"] + sorted(df['workload_type'].unique().tolist())
+        options=sorted(df['workload_type'].unique().tolist())
     )
 
     model_filter = st.multiselect(
@@ -96,7 +88,7 @@ filtered_df = df.copy()
 if selected_run != "All Runs":
     filtered_df = filtered_df[filtered_df['run_id'] == selected_run]
 
-if workload_filter != "All":
+if workload_filter:
     filtered_df = filtered_df[filtered_df['workload_type'] == workload_filter]
 
 if model_filter:

@@ -1,0 +1,47 @@
+# Small Mixed Workload Test - For testing periodic worker recreation
+# ==========================================================================
+
+# Profiling Configuration
+profiling:
+  num_warmup_iters: 5
+  num_active_iters: 10
+
+# Memory Management (Conservative Settings)
+memory:
+  enable_memory_check: true
+  memory_utilization: 0.8   # Target 80% GPU memory usage
+  memory_overhead: 1.4       # 40% safety margin for overhead
+
+# Output Configuration
+output:
+  results_dir: "results"
+  plots_dir: "plots"
+
+# Approaches to benchmark
+approaches:
+  - flashinfer_batch_attention
+  - flashinfer_mixed_fa2
+  - flashinfer_separated_fa2
+
+# Model Configurations - Just Llama 8B for quick test
+models:
+  llama_8b:
+    name: "llama8b"
+    num_qo_heads: 32  # Llama 3-8B
+    num_kv_heads: 8   # Llama 3-8B (GQA 4:1 ratio)
+    head_dim: 128
+    page_size: 16
+    workspace_size: 536870912  # 512 MB
+
+# Just TP=1 for quick test
+tp_degrees: [1]
+
+# Small test scenarios - just a few combinations
+scenario_generation:
+  strategy: "mixed_combinations"
+  decode_params:
+    batch_sizes: [1, 4, 16, 32]
+    kv_tokens: [1024, 4096, 16384]
+  prefill_params:
+    q_tokens: [128, 512, 2048]
+    kv_tokens: [1024, 4096, 16384]

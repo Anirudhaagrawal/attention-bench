@@ -9,12 +9,10 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from utils import (
-    load_all_results,
-    apply_filters,
-    create_filter_sidebar,
+    initialize_page_data,
+    get_approaches_from_filters_or_df,
     create_performance_bar_chart,
     create_approach_comparison_table,
-    extract_approaches_from_df,
     shorten_approach_name,
     create_csv_download,
     APPROACH_COLORS,
@@ -25,38 +23,20 @@ st.set_page_config(
     page_title="Performance - Attention Bench",
     page_icon="📊",
     layout="wide",
+    initial_sidebar_state="collapsed",
 )
 
 st.title("📊 Performance Analysis")
 st.caption("Tables and charts comparing attention approaches")
 
-# Load data
-@st.cache_data
-def get_data():
-    results_paths = ["results", "../results", Path(__file__).parent.parent.parent / "results"]
-    for path in results_paths:
-        df = load_all_results(str(path))
-        if not df.empty:
-            return df
-    return load_all_results("results")
+# Initialize page data
+df, filtered_df, _, filters = initialize_page_data(
+    require_approaches=False,
+    page_key="performance"
+)
 
-df = get_data()
-
-if df.empty:
-    st.warning("No benchmark results found. Please run some benchmarks first.")
-    st.stop()
-
-# Create filters
-filters = create_filter_sidebar(df)
-
-# Apply filters
-filtered_df = apply_filters(df, filters)
-
-if filtered_df.empty:
-    st.warning("No data matches the current filters. Try adjusting your selection.")
-    st.stop()
-
-approaches = filters.get('approaches', extract_approaches_from_df(filtered_df))
+# Get approaches from filters or extract from dataframe
+approaches = get_approaches_from_filters_or_df(filters, filtered_df)
 
 # Tabs for different views
 tab1, tab2, tab3 = st.tabs(["📋 Summary Table", "📊 Bar Charts", "📈 Detailed Results"])
@@ -168,6 +148,7 @@ with tab3:
         display_df,
         use_container_width=True,
         height=600,
+        hide_index=False,
     )
 
     # Download button

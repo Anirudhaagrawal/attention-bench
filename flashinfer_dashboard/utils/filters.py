@@ -3,6 +3,7 @@
 import streamlit as st
 import pandas as pd
 from typing import Dict, Any, List
+from .visualizations import shorten_approach_name
 
 
 def create_filter_sidebar(df: pd.DataFrame) -> Dict[str, Any]:
@@ -27,20 +28,19 @@ def create_filter_sidebar(df: pd.DataFrame) -> Dict[str, Any]:
         st.subheader("Run Selection")
         runs = df['run_id'].unique().tolist()
         if runs:
-            # Default to most recent run
-            default_run = [runs[0]] if runs else []
+            # Default to ALL runs (with deduplication enabled)
             filters['runs'] = st.multiselect(
                 "Select runs",
                 options=runs,
-                default=default_run,
-                help="Choose one or more benchmark runs to analyze"
+                default=runs,
+                help="Choose one or more benchmark runs to analyze (duplicates auto-resolved)"
             )
         else:
             filters['runs'] = []
 
         # Workload type
         st.subheader("Workload Type")
-        workload_types = ["All"] + sorted(df['workload_type'].unique().tolist())
+        workload_types = sorted(df['workload_type'].unique().tolist())
         filters['workload'] = st.radio(
             "Type",
             options=workload_types,
@@ -66,15 +66,30 @@ def create_filter_sidebar(df: pd.DataFrame) -> Dict[str, Any]:
             help="Tensor parallelism degrees"
         )
 
+        # Hardware type selection
+        if 'hardware_type' in df.columns:
+            hardware_types = sorted(df['hardware_type'].unique().tolist())
+            filters['hardware_types'] = st.multiselect(
+                "Hardware",
+                options=hardware_types,
+                default=hardware_types,
+                help="GPU hardware type (e.g., H200, A100)"
+            )
+        else:
+            filters['hardware_types'] = []
+
         # Approach selection
         st.subheader("Approaches")
-        approaches = extract_approaches(df)
+        # Get approaches relevant to selected workload type (with grouping applied)
+        workload_type = filters.get('workload', 'mixed')
+        approaches = get_relevant_approaches_for_workload(df, workload_type)
         if approaches:
             # Default to all approaches for best performer mode
             filters['approaches'] = st.multiselect(
                 "Select approaches to compare",
                 options=approaches,
                 default=approaches,
+                format_func=shorten_approach_name,
                 help="Choose which attention approaches to analyze (select 2 for pairwise, 3+ for best performer)"
             )
         else:
@@ -117,12 +132,57 @@ def create_filter_sidebar(df: pd.DataFrame) -> Dict[str, Any]:
                 help="Show only scenarios using CUDA graphs"
             )
 
+        # Deduplication is always enabled (selects best run for each scenario)
+        filters['deduplicate'] = True
+
         # Display filter summary
         st.divider()
         filtered_count = get_filtered_count(df, filters)
         st.metric("Matching Scenarios", filtered_count)
 
     return filters
+
+
+def get_relevant_approaches_for_workload(df: pd.DataFrame, workload_type: str) -> List[str]:
+    """Get relevant grouped approaches for a specific workload type.
+
+    Args:
+        df: DataFrame with benchmark results
+        workload_type: Type of workload ('prefill', 'decode', 'mixed')
+
+    Returns:
+        List of approach names (grouped for prefill/decode, original for mixed)
+    """
+    from .visualizations import APPROACH_GROUPS
+
+    if df.empty:
+        return []
+
+    # Extract all available approaches from data
+    all_approaches = extract_approaches(df)
+
+    # For mixed workloads, return all approaches (no grouping)
+    if workload_type not in APPROACH_GROUPS or workload_type == "mixed":
+        return all_approaches
+
+    # Apply grouping logic
+    groups = APPROACH_GROUPS[workload_type]
+    grouped_approaches = []
+    used_originals = set()
+
+    # Add grouped approach names
+    for group_name, members in groups.items():
+        # Check if any members are available in the data
+        if any(m in all_approaches for m in members):
+            grouped_approaches.append(group_name)
+            used_originals.update(members)
+
+    # Add ungrouped approaches (approaches not part of any group)
+    for approach in all_approaches:
+        if approach not in used_originals:
+            grouped_approaches.append(approach)
+
+    return sorted(grouped_approaches)
 
 
 def extract_approaches(df: pd.DataFrame) -> List[str]:
@@ -190,6 +250,7 @@ def create_approach_selector(df: pd.DataFrame, key: str = "approach_selector") -
         "Select approaches to compare",
         options=approaches,
         default=default,
+        format_func=shorten_approach_name,
         key=key,
         help="Choose which attention approaches to analyze"
     )
@@ -208,7 +269,7 @@ def create_workload_selector(key: str = "workload_selector") -> str:
     """
     workload = st.selectbox(
         "Workload Type",
-        options=["All", "decode", "prefill", "mixed"],
+        options=["decode", "prefill", "mixed"],
         index=0,
         key=key,
         help="Filter by workload type"

@@ -764,6 +764,13 @@ def load_config(config_path: str, use_cuda_graphs: bool, enable_profiling: bool 
 
     # Load model config
     model_config = config_data["model"]
+
+    # Load memory management settings
+    memory_config = config_data.get("memory", {})
+    enable_memory_check = memory_config.get("enable_memory_check", False)
+    memory_utilization = memory_config.get("memory_utilization", 0.90)
+    memory_overhead = memory_config.get("memory_overhead", 1.1)
+
     config = BenchmarkConfig(
         num_qo_heads=model_config["num_qo_heads"],
         num_kv_heads=model_config["num_kv_heads"],
@@ -777,6 +784,9 @@ def load_config(config_path: str, use_cuda_graphs: bool, enable_profiling: bool 
         results_dir=config_data["output"]["results_dir"],
         plots_dir=config_data["output"]["plots_dir"],
         approach_overrides=config_data.get("approach_overrides", {}),
+        enable_memory_check=enable_memory_check,
+        memory_utilization=memory_utilization,
+        memory_overhead=memory_overhead,
     )
 
     # Generate variants and scenarios programmatically

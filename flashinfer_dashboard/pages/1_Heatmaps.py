@@ -9,16 +9,21 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from utils import (
-    load_all_results,
-    apply_filters,
-    create_filter_sidebar,
+    initialize_page_data,
     create_speedup_heatmap,
     create_best_performer_heatmap,
+    create_mixed_heatmap,
+    create_mixed_best_performer_heatmap,
     create_speedup_distribution,
-    extract_approaches_from_df,
+    format_kv_length,
     shorten_approach_name,
     apply_approach_grouping,
     export_sidebar,
+    # New components
+    calculate_winner_statistics,
+    render_heatmap_mode_selector,
+    render_prefill_selectors,
+    render_winner_metrics,
 )
 
 # Page configuration
@@ -26,61 +31,21 @@ st.set_page_config(
     page_title="Heatmaps - Attention Bench",
     page_icon="🔥",
     layout="wide",
+    initial_sidebar_state="collapsed",
 )
 
 st.title("🔥 Performance Heatmaps")
 st.caption("Interactive visualization of approach performance across scenarios")
 
-# Load data
-@st.cache_data
-def get_data():
-    results_paths = ["results", "../results", Path(__file__).parent.parent.parent / "results"]
-    for path in results_paths:
-        df = load_all_results(str(path))
-        if not df.empty:
-            return df
-    return load_all_results("results")
+# Initialize page data
+df, filtered_df, approaches, filters = initialize_page_data(
+    require_approaches=True,
+    min_approaches=1,
+    page_key="heatmaps"
+)
 
-df = get_data()
-
-if df.empty:
-    st.warning("No benchmark results found. Please run some benchmarks first.")
-    st.stop()
-
-# Create filters
-filters = create_filter_sidebar(df)
-
-# Apply filters
-filtered_df = apply_filters(df, filters)
-
-if filtered_df.empty:
-    st.warning("No data matches the current filters. Try adjusting your selection.")
-    st.stop()
-
-# Heatmap mode selector
-st.subheader("Visualization Mode")
-
-col1, col2 = st.columns([1, 3])
-
-with col1:
-    mode = st.radio(
-        "Mode",
-        options=["Pairwise Comparison", "Best Performer"],
-        help="Pairwise: Compare two approaches. Best Performer: Show winner across all approaches."
-    )
-
-with col2:
-    if mode == "Pairwise Comparison":
-        st.info("Select two approaches in the sidebar to compare. Green = first approach faster, Red = second approach faster.")
-    else:
-        st.info("Shows the best performing approach for each scenario. Color intensity indicates margin of victory.")
-
-# Get available approaches for this filtered data
-approaches = extract_approaches_from_df(filtered_df)
-
-if not approaches:
-    st.error("No approach timing data found in the filtered results.")
-    st.stop()
+# Heatmap mode selector (using extracted component)
+mode = render_heatmap_mode_selector()
 
 # Heatmap visualization
 st.divider()
@@ -123,26 +88,61 @@ for workload_type in workload_types:
                 approach1 = selected_approaches[0]
                 approach2 = selected_approaches[1]
 
-                col1, col2 = st.columns([3, 1])
+                # Handle mixed workloads separately
+                if workload_type == "mixed":
+                    # Use extracted prefill selectors component
+                    selected_query, selected_kv = render_prefill_selectors(
+                        combo_df, model_name, tp_degree, key_prefix="pairwise"
+                    )
 
-                with col1:
+                    # Create mixed heatmap
+                    fig = create_mixed_heatmap(combo_df, approach1, approach2, selected_query, selected_kv)
+                    st.plotly_chart(fig, use_container_width=True, key=f"mixed_heatmap_{model_name}_{tp_degree}_{selected_query}_{selected_kv}")
+
+                    # Winner statistics using extracted components
+                    # Filter by selected prefill configuration
+                    filtered_combo = combo_df[
+                        (combo_df['prefill_query'] == selected_query) &
+                        (combo_df['prefill_kv'] == selected_kv)
+                    ].copy()
+
+                    # Apply approach grouping
+                    grouped_df, grouped_approaches = apply_approach_grouping(
+                        filtered_combo, workload_type, [approach1, approach2], "median"
+                    )
+
+                    # Calculate and render winner statistics (aggregate across runs for mixed)
+                    win_stats = calculate_winner_statistics(
+                        grouped_df, grouped_approaches,
+                        metric="median",
+                        aggregate_by=['decode_batch', 'decode_kv']
+                    )
+                    render_winner_metrics(win_stats, grouped_approaches)
+
+                else:
+                    # Regular prefill/decode heatmap
                     fig = create_speedup_heatmap(combo_df, approach1, approach2, workload_type=workload_type)
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, use_container_width=True, key=f"speedup_{workload_type}_{model_name}_{tp_degree}")
 
-                with col2:
-                    st.markdown("**Legend**")
-                    st.markdown(f"- 🟢 Green: `{shorten_approach_name(approach1)}` faster")
-                    st.markdown(f"- 🔴 Red: `{shorten_approach_name(approach2)}` faster")
-                    st.markdown("- ⬜ Gray: No data")
-                    st.markdown("---")
-                    st.markdown(f"**Speedup = {shorten_approach_name(approach2)} / {shorten_approach_name(approach1)}**")
-                    st.markdown("- > 1.0: First approach wins")
-                    st.markdown("- < 1.0: Second approach wins")
+                    # Winner statistics using extracted components
+                    # Apply approach grouping
+                    grouped_df, grouped_approaches = apply_approach_grouping(
+                        combo_df, workload_type, [approach1, approach2], "median"
+                    )
 
-                # Distribution chart
-                st.subheader("Speedup Distribution")
-                dist_fig = create_speedup_distribution(combo_df, approach1, approach2)
-                st.plotly_chart(dist_fig, use_container_width=True)
+                    # Determine aggregation columns based on workload type
+                    if workload_type == "prefill":
+                        aggregate_cols = ['query_length', 'kv_length']
+                    else:  # decode
+                        aggregate_cols = ['batch_size', 'kv_length']
+
+                    # Calculate and render winner statistics (aggregate across runs)
+                    win_stats = calculate_winner_statistics(
+                        grouped_df, grouped_approaches,
+                        metric="median",
+                        aggregate_by=aggregate_cols
+                    )
+                    render_winner_metrics(win_stats, grouped_approaches)
 
             else:
                 # Best performer mode
@@ -152,45 +152,59 @@ for workload_type in workload_types:
                     st.warning("Please select at least 2 approaches to compare.")
                     continue
 
-                fig = create_best_performer_heatmap(combo_df, selected_approaches, workload_type=workload_type)
-                st.plotly_chart(fig, use_container_width=True)
+                if workload_type == "mixed":
+                    # Use extracted prefill selectors component
+                    selected_query, selected_kv = render_prefill_selectors(
+                        combo_df, model_name, tp_degree, key_prefix="best"
+                    )
 
-                # Winner statistics - apply grouping first
-                st.subheader("Winner Statistics")
+                    # Create mixed best performer heatmap
+                    fig = create_mixed_best_performer_heatmap(combo_df, selected_approaches, selected_query, selected_kv)
+                    st.plotly_chart(fig, use_container_width=True, key=f"best_mixed_{model_name}_{tp_degree}_{selected_query}_{selected_kv}")
 
-                # Apply approach grouping for winner statistics
-                grouped_df, grouped_approaches = apply_approach_grouping(
-                    combo_df, workload_type, selected_approaches, "median"
-                )
+                    # Winner statistics - filter by selected prefill configuration
+                    stats_df = combo_df[
+                        (combo_df['prefill_query'] == selected_query) &
+                        (combo_df['prefill_kv'] == selected_kv)
+                    ].copy()
 
-                # Count wins per grouped approach
-                wins = {}
-                for approach in grouped_approaches:
-                    col = f"{approach}_median"
-                    if col in grouped_df.columns:
-                        wins[approach] = 0
+                    # Apply approach grouping
+                    grouped_df, grouped_approaches = apply_approach_grouping(
+                        stats_df, workload_type, selected_approaches, "median"
+                    )
 
-                for _, scenario_row in grouped_df.iterrows():
-                    times = {}
-                    for approach in grouped_approaches:
-                        col = f"{approach}_median"
-                        if col in grouped_df.columns and pd.notna(scenario_row[col]):
-                            times[approach] = scenario_row[col]
+                    # Calculate and render winner statistics (aggregate across runs for mixed)
+                    win_stats = calculate_winner_statistics(
+                        grouped_df, grouped_approaches,
+                        metric="median",
+                        aggregate_by=['decode_batch', 'decode_kv']
+                    )
+                    render_winner_metrics(win_stats, grouped_approaches)
 
-                    if times:
-                        winner = min(times.items(), key=lambda x: x[1])[0]
-                        wins[winner] = wins.get(winner, 0) + 1
+                else:
+                    # Regular workloads
+                    fig = create_best_performer_heatmap(combo_df, selected_approaches, workload_type=workload_type)
+                    st.plotly_chart(fig, use_container_width=True, key=f"best_{workload_type}_{model_name}_{tp_degree}")
 
-                # Display win counts
-                if wins:
-                    cols = st.columns(len(wins))
-                    for i, (approach, win_count) in enumerate(sorted(wins.items(), key=lambda x: -x[1])):
-                        with cols[i % len(cols)]:
-                            st.metric(
-                                shorten_approach_name(approach),
-                                f"{win_count} wins",
-                                f"{100 * win_count / len(grouped_df):.1f}%" if len(grouped_df) > 0 else "0%"
-                            )
+                    # Winner statistics
+                    # Apply approach grouping
+                    grouped_df, grouped_approaches = apply_approach_grouping(
+                        combo_df, workload_type, selected_approaches, "median"
+                    )
+
+                    # Determine aggregation columns based on workload type
+                    if workload_type == "prefill":
+                        aggregate_cols = ['query_length', 'kv_length']
+                    else:  # decode
+                        aggregate_cols = ['batch_size', 'kv_length']
+
+                    # Calculate and render winner statistics (aggregate across runs)
+                    win_stats = calculate_winner_statistics(
+                        grouped_df, grouped_approaches,
+                        metric="median",
+                        aggregate_by=aggregate_cols
+                    )
+                    render_winner_metrics(win_stats, grouped_approaches)
 
 # Export options
 export_sidebar(filtered_df, filters.get('approaches', approaches), filters)

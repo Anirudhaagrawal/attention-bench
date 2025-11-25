@@ -12,10 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
 from utils import (
-    load_all_results,
-    apply_filters,
-    create_filter_sidebar,
-    extract_approaches_from_df,
+    initialize_page_data,
     shorten_approach_name,
     APPROACH_COLORS,
 )
@@ -32,6 +29,7 @@ st.set_page_config(
     page_title="Workloads - Attention Bench",
     page_icon="📋",
     layout="wide",
+    initial_sidebar_state="collapsed",
 )
 
 st.title("📋 Workload Category Analysis")
@@ -46,15 +44,6 @@ st.info("""
 """)
 
 # Load data
-@st.cache_data
-def get_data():
-    results_paths = ["results", "../results", Path(__file__).parent.parent.parent / "results"]
-    for path in results_paths:
-        df = load_all_results(str(path))
-        if not df.empty:
-            return df
-    return load_all_results("results")
-
 @st.cache_data
 def add_categories(df):
     """Add workload categories to DataFrame."""
@@ -85,24 +74,15 @@ def add_categories(df):
     df['workload_category'] = df.apply(get_categories, axis=1)
     return df
 
-df = get_data()
+# Initialize page data
+raw_df, filtered_df, approaches, filters = initialize_page_data(
+    require_approaches=False,
+    page_key="workloads"
+)
 
-if df.empty:
-    st.warning("No benchmark results found.")
-    st.stop()
-
-# Add categories
-df = add_categories(df)
-
-# Sidebar filters
-filters = create_filter_sidebar(df)
-filtered_df = apply_filters(df, filters)
-
-if filtered_df.empty:
-    st.warning("No data matches the current filters.")
-    st.stop()
-
-approaches = filters.get('approaches', extract_approaches_from_df(filtered_df))
+# Add categories to both dataframes
+df = add_categories(raw_df)
+filtered_df = add_categories(filtered_df)
 
 # Category selector
 st.subheader("Select Category")
@@ -206,11 +186,25 @@ with tab2:
                     avg_times[shorten_approach_name(approach)] = times.mean()
 
         if avg_times:
+            # Get colors for shortened approach names
+            colors = []
+            for short_name in avg_times.keys():
+                # Try to get color using shortened name first, then try original approach names
+                color = APPROACH_COLORS.get(short_name)
+                if color is None:
+                    # Find original approach name that maps to this shortened name
+                    for orig in approaches:
+                        if shorten_approach_name(orig) == short_name:
+                            color = APPROACH_COLORS.get(orig, '#808080')
+                            break
+                if color is None:
+                    color = '#808080'
+                colors.append(color)
+
             fig = go.Figure(data=[go.Bar(
                 x=list(avg_times.keys()),
                 y=list(avg_times.values()),
-                marker_color=[APPROACH_COLORS.get(a, '#808080') for a in
-                             [k for k in approaches if shorten_approach_name(k) in avg_times]]
+                marker_color=colors
             )])
             fig.update_layout(
                 title=f"Average Time by Approach ({cat.title()})",
