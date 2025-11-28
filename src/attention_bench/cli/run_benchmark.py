@@ -205,7 +205,10 @@ def _check_memory_feasibility(
     )
 
     if not estimate.fits:
-        skip_reason = f"OOM: needs {estimate.total_gb:.2f}GB, have {estimate.available_gb:.2f}GB"
+        if estimate.exceeds_page_limit:
+            skip_reason = f"PAGE_LIMIT: {estimate.num_pages:,} pages exceeds FlashInfer limit of 16,777,216 (2^24)"
+        else:
+            skip_reason = f"OOM: needs {estimate.total_gb:.2f}GB, have {estimate.available_gb:.2f}GB"
         return False, skip_reason
 
     return True, None
@@ -216,6 +219,7 @@ def _run_single_approach(
     approach_name: str,
     ctx: 'BenchmarkContext',
     enable_output_validation: bool = False,
+    disable_internal_profiling: bool = False,
 ) -> Dict[str, Any]:
     """Run a single approach with warmup and timing.
 
@@ -224,6 +228,7 @@ def _run_single_approach(
         approach_name: Name of the approach for profiling
         ctx: BenchmarkContext with all required data
         enable_output_validation: Whether to capture output for validation
+        disable_internal_profiling: Whether to skip RecordFunctionTracer for external profilers
 
     Returns:
         Dict with keys:
@@ -240,38 +245,61 @@ def _run_single_approach(
     }
 
     try:
-        # Setup approach and get callable
-        run_fn = approach.setup(ctx, return_output=enable_output_validation)
+        # Optimization: Always use return_output=False during profiling for speed
+        # Only get actual output at the end if validation is needed
+        run_fn = approach.setup(ctx, return_output=False)
 
-        # Warmup: run once to ensure kernels are compiled
-        warmup_output = run_fn()
+        # Warmup: run configured number of iterations to ensure kernels are compiled
+        for _ in range(ctx.num_warmup_iters):
+            warmup_output = run_fn()
         torch.cuda.synchronize()
 
-        # Profile with RecordFunctionTracer
-        tracer = RecordFunctionTracer()
-        last_output = None
-        with tracer:
+        # Profile with RecordFunctionTracer (unless disabled for external profiling)
+        if not disable_internal_profiling:
+            # Normal path: use RecordFunctionTracer
+            tracer = RecordFunctionTracer()
+            with tracer:
+                for _ in range(ctx.num_active_iters):
+                    with torch.profiler.record_function(approach_name):
+                        run_fn()
+
+            # Get timing statistics
+            time_stats_dict = tracer.get_operation_time_stats()
+
+            if approach_name in time_stats_dict:
+                time_stats = time_stats_dict[approach_name]
+                result['time_ms'] = time_stats['mean']
+                result['time_stats'] = time_stats
+        else:
+            # External profiling mode: skip RecordFunctionTracer
             for _ in range(ctx.num_active_iters):
-                with torch.profiler.record_function(approach_name):
-                    last_output = run_fn()
+                run_fn()
 
-        # Capture output for validation
-        if enable_output_validation and last_output is not None:
-            if isinstance(last_output, tuple):
-                output_tensor = last_output[0]
-            else:
-                output_tensor = last_output
+            # No timing stats available in external profiling mode
+            result['time_ms'] = None
+            result['time_stats'] = None
 
-            if output_tensor.numel() > 0:
-                result['output'] = output_tensor.detach().clone()
+        # Capture output for validation (run one more iteration with output enabled)
+        if enable_output_validation:
+            # Teardown the no-output setup
+            if hasattr(approach, 'teardown'):
+                try:
+                    approach.teardown()
+                except:
+                    pass
 
-        # Get timing statistics
-        time_stats_dict = tracer.get_operation_time_stats()
+            # Re-setup with output enabled for validation
+            run_fn_with_output = approach.setup(ctx, return_output=True)
+            last_output = run_fn_with_output()
 
-        if approach_name in time_stats_dict:
-            time_stats = time_stats_dict[approach_name]
-            result['time_ms'] = time_stats['mean']
-            result['time_stats'] = time_stats
+            if last_output is not None:
+                if isinstance(last_output, tuple):
+                    output_tensor = last_output[0]
+                else:
+                    output_tensor = last_output
+
+                if output_tensor.numel() > 0:
+                    result['output'] = output_tensor.detach().clone()
 
     except Exception as e:
         result['error'] = str(e)
@@ -293,11 +321,9 @@ def _cleanup_approach(approach, approach_name: str):
         except Exception as e:
             print(f"  Warning: teardown() failed for {approach_name}: {e}")
 
-    # Explicitly clean up all GPU memory
+    # Clean up GPU memory (gc.collect only runs at scenario end for efficiency)
     torch.cuda.synchronize()
     torch.cuda.empty_cache()
-    gc.collect()
-    torch.cuda.synchronize()
 
 
 def _validate_approach_outputs(
@@ -451,6 +477,7 @@ class BenchmarkConfig:
     num_active_iters: int
     use_cuda_graphs: bool = False
     enable_profiling: bool = False
+    disable_internal_profiling: bool = False  # Disable RecordFunctionTracer for external profilers
     enable_output_validation: bool = False  # Enable output correctness checking
     results_dir: str = "results"
     plots_dir: str = "plots"
@@ -501,7 +528,7 @@ class ToleranceBenchmarkRunner:
         num_pages = [(kv + self.config.page_size - 1) // self.config.page_size for kv in kv_lengths]
 
         # Create Q and KV cache tensors
-        q = torch.randn(
+        q = torch.empty(
             sum(q_lengths), self.config.num_qo_heads, self.config.head_dim,
             dtype=torch.float16, device="cuda"
         )
@@ -570,9 +597,10 @@ class ToleranceBenchmarkRunner:
         )
 
         # 4. Compute sequence length tensors
+        # Optimization: Keep tensors on GPU (no CPU transfer needed)
         seq_lens_kv = get_seq_lens(
-            kv_page_indptr.cpu(), kv_last_page_len.cpu(), page_size
-        ).to("cuda")
+            kv_page_indptr, kv_last_page_len, page_size
+        )
         seq_lens_q = qo_indptr[1:] - qo_indptr[:-1]
         max_token_per_sequence = seq_lens_q.max().item()
         max_sequence_kv = seq_lens_kv.max().item()
@@ -691,7 +719,8 @@ class ToleranceBenchmarkRunner:
             # Run the approach with timing
             result = _run_single_approach(
                 approach, approach_name, ctx,
-                enable_output_validation=self.config.enable_output_validation
+                enable_output_validation=self.config.enable_output_validation,
+                disable_internal_profiling=self.config.disable_internal_profiling
             )
 
             # Process results
@@ -796,7 +825,11 @@ def load_config(config_path: str, use_cuda_graphs: bool, enable_profiling: bool 
         )
         print(f"Generated {len(variants_dict)} variants and {len(scenarios_dict)} scenarios")
     else:
-        raise ValueError("Config must contain 'scenario_generation' section")
+        # Fallback to manually defined variants/scenarios if present
+        variants_dict = config_data.get("variants", {})
+        scenarios_dict = config_data.get("scenarios", {})
+        if not variants_dict or not scenarios_dict:
+            raise ValueError("Config must contain either 'scenario_generation' or both 'variants' and 'scenarios' sections")
 
     # Convert variant dicts to VariantConfig objects
     variants = {}

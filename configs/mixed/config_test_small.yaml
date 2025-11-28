@@ -40,8 +40,8 @@ tp_degrees: [1]
 scenario_generation:
   strategy: "mixed_combinations"
   decode_params:
-    batch_sizes: [1, 4, 16, 32]
-    kv_tokens: [1024, 4096, 16384]
+    batch_sizes: [32, 64]
+    kv_tokens: [16384]
   prefill_params:
-    q_tokens: [128, 512, 2048]
-    kv_tokens: [1024, 4096, 16384]
+    q_tokens: [2048]
+    kv_tokens: [16384]

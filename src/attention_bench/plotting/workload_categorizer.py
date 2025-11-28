@@ -60,8 +60,8 @@ def categorize_workload(batch: int, query: int, kv: int, scenario_type: str) -> 
     for cat_name, ranges in categories.items():
         kv_match = ranges['kv'][0] <= kv <= ranges['kv'][1]
 
-        if scenario_type == 'decode':
-            # For decode: check decode batch size + kv
+        if scenario_type in ['decode', 'mixed']:
+            # For decode/mixed: check decode batch size + kv
             batch_match = ranges['decode_batch'][0] <= batch <= ranges['decode_batch'][1]
             if batch_match and kv_match:
                 matches.append(cat_name)
@@ -71,6 +71,64 @@ def categorize_workload(batch: int, query: int, kv: int, scenario_type: str) -> 
             chunk_match = ranges['prefill_chunk'][0] <= query <= ranges['prefill_chunk'][1]
             if chunk_match and kv_match:
                 matches.append(cat_name)
+
+    return matches
+
+
+def categorize_mixed_workload(decode_batch: int, decode_kv: int, prefill_query: int, prefill_kv: int) -> List[str]:
+    """
+    Categorize a mixed workload scenario based on all dimensions.
+
+    For mixed workloads, we consider all 4 dimensions separately:
+    - decode_batch: The decode batch size
+    - decode_kv: The decode KV cache length
+    - prefill_query: The prefill query/chunk size
+    - prefill_kv: The prefill KV cache length
+
+    A scenario matches a category only if ALL 4 dimensions fall within the ranges.
+
+    Args:
+        decode_batch: Decode batch size
+        decode_kv: Decode KV cache length
+        prefill_query: Prefill query/chunk size
+        prefill_kv: Prefill KV cache length
+
+    Returns:
+        List of matching category names
+    """
+    # Define category ranges for mixed workloads
+    categories = {
+        'code': {
+            'decode_batch': (4, 16),
+            'decode_kv': (16 * 1024, 1024 * 1024),  # 16k to 1M
+            'prefill_query': (32, 4096),
+            'prefill_kv': (16 * 1024, 1024 * 1024),  # 16k to 1M
+        },
+        'chat': {
+            'decode_batch': (16, 128),
+            'decode_kv': (1024, 128 * 1024),  # 1k to 128k
+            'prefill_query': (32, 4096),
+            'prefill_kv': (1024, 128 * 1024),  # 1k to 128k
+        },
+        'summarization': {
+            'decode_batch': (32, 256),
+            'decode_kv': (8 * 1024, 512 * 1024),  # 8k to 512k
+            'prefill_query': (2048, 8192),
+            'prefill_kv': (8 * 1024, 512 * 1024),  # 8k to 512k
+        },
+    }
+
+    matches = []
+
+    for cat_name, ranges in categories.items():
+        # Check if ALL 4 dimensions match
+        batch_match = ranges['decode_batch'][0] <= decode_batch <= ranges['decode_batch'][1]
+        decode_kv_match = ranges['decode_kv'][0] <= decode_kv <= ranges['decode_kv'][1]
+        query_match = ranges['prefill_query'][0] <= prefill_query <= ranges['prefill_query'][1]
+        prefill_kv_match = ranges['prefill_kv'][0] <= prefill_kv <= ranges['prefill_kv'][1]
+
+        if batch_match and decode_kv_match and query_match and prefill_kv_match:
+            matches.append(cat_name)
 
     return matches
 

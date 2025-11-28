@@ -10,7 +10,6 @@ from .data_loader import (
 )
 
 from .filters import (
-    create_filter_sidebar,
     extract_approaches,
     create_approach_selector,
     create_workload_selector,
@@ -102,7 +101,6 @@ __all__ = [
     'apply_filters',
     'get_summary_stats',
     # Filters
-    'create_filter_sidebar',
     'extract_approaches',
     'create_approach_selector',
     'create_workload_selector',

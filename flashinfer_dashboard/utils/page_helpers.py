@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Tuple, List, Dict, Any, Optional
 
 from .data_loader import load_all_results, extract_approaches_from_df, apply_filters
-from .filters import create_filter_sidebar
+from .filters import create_filter_topbar
 
 
 @st.cache_data
@@ -85,7 +85,7 @@ def initialize_page_data(
         st.stop()
 
     # Create filters
-    filters = create_filter_sidebar(df)
+    filters = create_filter_topbar(df)
 
     # Add refresh button to sidebar if requested
     if include_refresh_button:

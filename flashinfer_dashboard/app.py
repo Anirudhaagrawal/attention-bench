@@ -42,7 +42,7 @@ st.markdown("""
 st.title("⚡ Attention Bench Dashboard")
 st.caption("Interactive analysis of attention mechanism performance")
 
-# Load data
+# Load data (automatically filters out default model runs)
 df, results_path = get_cached_data(return_path=True)
 
 if df.empty:
@@ -64,25 +64,16 @@ with st.sidebar:
         st.cache_data.clear()
         st.rerun()
 
-    # Quick filters
-    st.header("Quick Filters")
-
-    # Run selector
-    available_runs = get_available_runs(results_path)
-    if available_runs:
-        st.session_state.selected_run = st.selectbox(
-            "Select Run",
-            options=available_runs,
-            help="Choose a benchmark run to analyze"
-        )
-
 # Main content - Overview Metrics
 st.header("📈 Overview")
 
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-    st.metric("Total Runs", stats['total_runs'])
+    # Total measurements = scenarios × approaches
+    total_measurements = stats['total_scenarios'] * len(stats['approaches'])
+    st.metric("Total Measurements", f"{total_measurements:,}")
+    st.caption(f"{stats['total_scenarios']} scenarios × {len(stats['approaches'])} kernels")
 
 with col2:
     st.metric("Models Tested", len(stats['models']))
@@ -91,7 +82,7 @@ with col3:
     st.metric("Workload Types", len(stats['workload_types']))
 
 with col4:
-    st.metric("Approaches", len(stats['approaches']))
+    st.metric("Attention Kernels", len(stats['approaches']))
 
 # Detailed breakdown
 st.divider()
@@ -115,7 +106,7 @@ with col2:
         wtype_count = len(df[df['workload_type'] == wtype])
         st.write(f"- **{wtype}**: {wtype_count} scenarios")
 
-    st.subheader("Available Approaches")
+    st.subheader("Attention Kernels")
     for approach in stats['approaches']:
         st.write(f"- {shorten_approach_name(approach)}")
 
@@ -123,29 +114,26 @@ with col2:
 st.divider()
 st.header("📍 Quick Navigation")
 
-col1, col2, col3, col4 = st.columns(4)
+col1, col2, col3 = st.columns(3)
 
 with col1:
     st.page_link("pages/1_Heatmaps.py", label="🔥 Heatmaps", icon="🔥")
-    st.caption("Interactive speedup heatmaps")
+    st.caption("Interactive performance heatmaps")
 
 with col2:
-    st.page_link("pages/2_Performance.py", label="📊 Performance", icon="📊")
-    st.caption("Tables and comparison charts")
+    st.page_link("pages/2_Line_Graphs.py", label="📈 Line Graphs", icon="📈")
+    st.caption("Trend analysis and comparisons")
 
 with col3:
-    st.page_link("pages/3_Explorer.py", label="🔍 Explorer", icon="🔍")
-    st.caption("Browse raw benchmark data")
-
-with col4:
-    st.page_link("pages/4_Workloads.py", label="📋 Workloads", icon="📋")
-    st.caption("Analysis by workload category")
+    st.page_link("pages/3_Raw_Data.py", label="📋 Raw Data", icon="📋")
+    st.caption("Detailed results table with export")
 
 # Recent runs summary
 st.divider()
 st.header("🕐 Recent Runs")
 
 # Show latest 5 runs
+available_runs = get_available_runs(results_path)
 for run_id in available_runs[:5]:
     run_df = df[df['run_id'] == run_id]
 

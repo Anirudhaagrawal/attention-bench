@@ -193,23 +193,29 @@ def load_benchmark_results(filepath: str) -> list:
             continue
 
         with open(fp, 'r') as f:
-            data = json.load(f)
+            if fp.endswith('.jsonl'):
+                # JSONL format: one scenario per line
+                scenarios = [json.loads(line) for line in f if line.strip()]
+                print(f"Loaded {fp} (JSONL format, {len(scenarios)} scenarios)")
+            else:
+                # JSON format
+                data = json.load(f)
 
-        # Check if this is the new format with metadata
-        if isinstance(data, dict) and "metadata" in data and "results" in data:
-            # New format: extract metadata and results
-            metadata = data["metadata"]
-            scenarios = data["results"]
+                # Check if this is the new format with metadata
+                if isinstance(data, dict) and "metadata" in data and "results" in data:
+                    # New format: extract metadata and results
+                    metadata = data["metadata"]
+                    scenarios = data["results"]
 
-            # Print metadata for user info
-            print(f"Loaded {fp}:")
-            print(f"  Model: {metadata.get('model_name', 'unknown')}")
-            print(f"  TP Degree: {metadata.get('tp_degree', 'unknown')}")
-            print(f"  Heads: {metadata.get('num_qo_heads', '?')} QO, {metadata.get('num_kv_heads', '?')} KV")
-        else:
-            # Old format: raw results array
-            scenarios = data
-            print(f"Loaded {fp} (legacy format)")
+                    # Print metadata for user info
+                    print(f"Loaded {fp}:")
+                    print(f"  Model: {metadata.get('model_name', 'unknown')}")
+                    print(f"  TP Degree: {metadata.get('tp_degree', 'unknown')}")
+                    print(f"  Heads: {metadata.get('num_qo_heads', '?')} QO, {metadata.get('num_kv_heads', '?')} KV")
+                else:
+                    # Old format: raw results array
+                    scenarios = data
+                    print(f"Loaded {fp} (legacy format)")
 
         # Deduplicate by scenario name (keep first occurrence)
         for scenario in scenarios:

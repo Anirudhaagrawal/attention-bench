@@ -184,8 +184,8 @@ def build_hover_text_speedup(
         f"{config.y_axis_label}: {config.format_y_axis_value(y_val)}<br>"
         f"{config.x_axis_label}: {config.format_x_axis_value(x_val)}<br>"
         f"Speedup: {speedup:.3f}x<br>"
-        f"{short1}: {time1*1000:.2f}ms<br>"
-        f"{short2}: {time2*1000:.2f}ms"
+        f"{short1}: {time1*1000:.2f}µs<br>"
+        f"{short2}: {time2*1000:.2f}µs"
     )
 
 
@@ -201,7 +201,7 @@ def build_hover_text_best_performer(
         config: Workload configuration for formatting
         y_val: Raw y-axis value
         x_val: Raw x-axis value
-        approach_times: List of (approach_name, time_in_seconds) tuples, sorted by time
+        approach_times: List of (approach_name, time_in_ms) tuples, sorted by time
 
     Returns:
         HTML-formatted hover text string
@@ -213,7 +213,7 @@ def build_hover_text_best_performer(
 
     for approach, time in approach_times:
         short_name = shorten_approach_name(approach)
-        lines.append(f"{short_name}: {time*1000:.2f}ms")
+        lines.append(f"{short_name}: {time*1000:.2f}µs")
 
     return "<br>".join(lines)
 

@@ -254,6 +254,50 @@ attention-bench-ray --config configs/mixed/config_mixed_all_combinations.yaml \
     --memory-overhead 1.2
 ```
 
+### Checkpointing and Resume
+
+The benchmark automatically checkpoints progress to `.jsonl` files, enabling crash recovery and resume functionality.
+
+**How it works:**
+- **During execution:** Results append to `.jsonl` checkpoint files (fast, append-only)
+- **On completion:** Final `.json` file created with pretty formatting
+- **Dashboard:** Can read both `.jsonl` (live) and `.json` (final) formats
+
+**Resume after crash:**
+
+```bash
+# Start benchmark
+attention-bench-ray --config configs/mixed/config_mixed_multi_model_tp.yaml --num-gpus 4
+# Creates: results/h200/run_2025-11-26_14-50-39/
+
+# If crash occurs, resume from same directory
+attention-bench-ray --config configs/mixed/config_mixed_multi_model_tp.yaml \
+  --resume-from results/h200/run_2025-11-26_14-50-39/ \
+  --num-gpus 4
+```
+
+**Benefits:**
+- **Zero data loss:** Scenarios saved immediately after completion
+- **Efficient:** JSONL append (~0.5ms overhead per scenario)
+- **Flexible:** Resume from any checkpoint, even partial runs
+- **Live monitoring:** Dashboard can track progress via `.jsonl` files
+
+**Example workflow:**
+
+```bash
+# Start long-running benchmark (11,088 scenarios)
+attention-bench-ray --config configs/mixed/config_mixed_multi_model_tp.yaml --num-gpus 4
+
+# Crash at hour 50? No problem - 5,000 scenarios already saved
+# Resume picks up exactly where it left off
+attention-bench-ray --config configs/mixed/config_mixed_multi_model_tp.yaml \
+  --resume-from results/h200/run_2025-11-26_14-50-39/ \
+  --num-gpus 4
+
+# Remaining 6,088 scenarios complete
+# Final .json created with all 11,088 results
+```
+
 ### Running All Configs (Batch Execution)
 
 The `scripts/run_all_configs.sh` script runs benchmarks for all configuration files automatically and generates timestamped logs:

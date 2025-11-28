@@ -23,7 +23,9 @@ TP Profiling Note:
 
 import argparse
 import json
+import logging
 import os
+import sys
 import time
 from datetime import datetime
 import ray
@@ -174,6 +176,49 @@ def create_timestamped_output_dir(base_dir: str, hardware_type: str = None) -> s
     return output_dir
 
 
+class TeeOutput:
+    """Redirect stdout/stderr to both console and file."""
+    def __init__(self, file_path, original_stream):
+        self.file = open(file_path, 'a', buffering=1)  # Line buffered
+        self.original_stream = original_stream
+
+    def write(self, data):
+        self.original_stream.write(data)
+        self.file.write(data)
+
+    def flush(self):
+        self.original_stream.flush()
+        self.file.flush()
+
+    def close(self):
+        self.file.close()
+
+
+def setup_logging(log_dir: str, config_name: str) -> str:
+    """Setup logging to both console and file by redirecting stdout.
+
+    Args:
+        log_dir: Base log directory (e.g., "logs/")
+        config_name: Config file basename without extension
+
+    Returns:
+        Path to log file
+    """
+    # Create timestamped log directory
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_subdir = os.path.join(log_dir, timestamp)
+    os.makedirs(log_subdir, exist_ok=True)
+
+    # Create log file path
+    log_filename = f"{config_name}.log"
+    log_path = os.path.join(log_subdir, log_filename)
+
+    # Redirect stdout to both console and file
+    sys.stdout = TeeOutput(log_path, sys.stdout)
+
+    return log_path
+
+
 def prefilter_scenarios(
     scenarios: Dict,
     variants: Dict,
@@ -233,6 +278,7 @@ def run_benchmark_for_model_tp(
     memory_overhead: float,
     output_dir: str,
     scenario_gen_config: Dict,
+    profiling_config: Dict,
     worker_recreation_interval: int = 100
 ) -> Tuple[List[Dict], int, int, List]:
     """Run benchmarks for a single (model, TP) combination.
@@ -274,10 +320,17 @@ def run_benchmark_for_model_tp(
         # Create temporary config file for workers
         temp_config = {
             "model": tp_model_config,
-            "profiling": {"num_warmup_iters": 5, "num_active_iters": 50},
+            "profiling": profiling_config,
             "output": {"results_dir": output_dir, "plots_dir": "plots"},
-            "scenario_generation": scenario_gen_config  # Use real scenario config
         }
+
+        # Include either scenario_generation or manual variants/scenarios
+        if scenario_gen_config:
+            temp_config["scenario_generation"] = scenario_gen_config
+        else:
+            # Use manual variants and scenarios
+            temp_config["variants"] = variants
+            temp_config["scenarios"] = scenarios
 
         import tempfile
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
@@ -298,6 +351,23 @@ def run_benchmark_for_model_tp(
 
     # Run greedy scheduling (same as before)
     results = []
+
+    # Load checkpoint if resuming
+    results_filename_json = f"{config_name}_{model_name}_tp{tp_degree}.json"
+    results_filename_jsonl = f"{config_name}_{model_name}_tp{tp_degree}.jsonl"
+    results_path_jsonl = os.path.join(output_dir, results_filename_jsonl)
+
+    if os.path.exists(results_path_jsonl):
+        print(f"\nFound checkpoint: {results_path_jsonl}")
+        with open(results_path_jsonl, 'r') as f:
+            for line in f:
+                if line.strip():
+                    results.append(json.loads(line.strip()))
+        completed_scenarios = {r['scenario_name'] for r in results}
+        feasible = [(n, c) for n, c in feasible if n not in completed_scenarios]
+        print(f"Loaded {len(results)} completed scenarios from checkpoint")
+        print(f"Remaining scenarios: {len(feasible)}")
+
     start_time = time.time()
 
     scenario_queue = list(feasible)
@@ -350,6 +420,11 @@ def run_benchmark_for_model_tp(
                 result = {'scenario_name': scenario_name, 'skipped_reason': f'Error: {str(e)}'}
 
             results.append(result)
+
+            # Append to JSONL checkpoint
+            with open(results_path_jsonl, 'a') as f:
+                f.write(json.dumps(result) + '\n')
+
             time_str = "SKIPPED" if result.get('skipped_reason') else "OK"
             print(f"  [{len(results)}/{len(feasible)}] {scenario_name}: {time_str}")
 
@@ -492,6 +567,10 @@ def main():
     parser.add_argument("--approaches", type=str, help="Comma-separated list of approaches")
     parser.add_argument("--models", type=str, help="Comma-separated list of models (default: all)")
     parser.add_argument("--tp-degrees", type=str, help="Comma-separated list of TP degrees (default: all)")
+    parser.add_argument("--resume-from", type=str, default=None,
+                       help="Resume from existing run directory (e.g., results/h200/run_2025-11-26_14-50-39/)")
+    parser.add_argument("--log-dir", type=str, default="logs",
+                       help="Directory for log files (default: logs/)")
     args = parser.parse_args()
 
     # Initialize Ray
@@ -510,6 +589,9 @@ def main():
 
         # Get scenario generation config for workers
         scenario_gen_config = config_data.get("scenario_generation", {})
+
+        # Get profiling config for workers
+        profiling_config = config_data.get("profiling", {"num_warmup_iters": 5, "num_active_iters": 50})
 
         # Get memory settings from config (can be overridden by CLI args)
         memory_config = config_data.get("memory", {})
@@ -545,13 +627,21 @@ def main():
         if args.worker_recreation_interval > 0:
             print(f"Worker recreation interval: every {args.worker_recreation_interval} scenarios")
 
-        # Create timestamped output directory with hardware-specific folder
+        # Create timestamped output directory with hardware-specific folder (or use resume-from)
         base_results_dir = output_config.get("results_dir", "results")
-        timestamped_dir = create_timestamped_output_dir(base_results_dir, hardware_type)
-        print(f"\nOutput directory: {timestamped_dir}")
+        if args.resume_from:
+            timestamped_dir = args.resume_from
+            print(f"\nResuming from: {timestamped_dir}")
+        else:
+            timestamped_dir = create_timestamped_output_dir(base_results_dir, hardware_type)
+            print(f"\nOutput directory: {timestamped_dir}")
 
         # Extract config name (without path and extension)
         config_name = os.path.splitext(os.path.basename(args.config))[0]
+
+        # Setup logging (single log file for entire run)
+        log_path = setup_logging(args.log_dir, config_name)
+        print(f"Logging to: {log_path}\n")
 
         # Loop over all (model, TP) combinations
         all_summaries = []
@@ -577,6 +667,7 @@ def main():
                         memory_overhead=memory_overhead,
                         output_dir=timestamped_dir,
                         scenario_gen_config=scenario_gen_config,
+                        profiling_config=profiling_config,
                         worker_recreation_interval=args.worker_recreation_interval
                     )
 

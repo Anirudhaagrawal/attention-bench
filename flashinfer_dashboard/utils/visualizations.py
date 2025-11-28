@@ -15,7 +15,6 @@ from .colors import (
 )
 from .formatting import shorten_approach_name, format_kv_length
 from .ui_components import build_approach_legend
-from .approach_grouping import apply_approach_grouping
 
 
 def create_speedup_heatmap_unified(
@@ -139,24 +138,24 @@ def create_speedup_heatmap_unified(
     ties = 0
 
     for (i, j), (speedup, time1, time2) in cell_data.items():
-        time1_ms = time1 * 1000
-        time2_ms = time2 * 1000
+        time1_us = time1 * 1000  # Convert ms to µs
+        time2_us = time2 * 1000  # Convert ms to µs
         if abs(time1 - time2) / min(time1, time2) < 0.01:  # Within 1% = tie
             ties += 1
-            text_matrix[i][j] = f"{short1}:{time1_ms:.0f}<br>{short2}:{time2_ms:.0f}<br>{speedup:.2f}x"
+            text_matrix[i][j] = f"{short1}:{time1_us:.0f}µs<br>{short2}:{time2_us:.0f}µs<br>{speedup:.2f}x"
         elif time1 < time2:
             # approach1 is winner (faster)
             approach1_wins += 1
-            text_matrix[i][j] = f"<b>{short1}:{time1_ms:.0f}</b><br>{short2}:{time2_ms:.0f}<br>{speedup:.2f}x"
+            text_matrix[i][j] = f"{short1}:{time1_us:.0f}µs<br>{short2}:{time2_us:.0f}µs<br>{speedup:.2f}x"
         else:
             # approach2 is winner (faster)
             approach2_wins += 1
-            text_matrix[i][j] = f"<b>{short2}:{time2_ms:.0f}</b><br>{short1}:{time1_ms:.0f}<br>{speedup:.2f}x"
+            text_matrix[i][j] = f"{short2}:{time2_us:.0f}µs<br>{short1}:{time1_us:.0f}µs<br>{speedup:.2f}x"
 
     # Update heatmap with text
     fig.data[0].text = text_matrix
     fig.data[0].texttemplate = "%{text}"
-    fig.data[0].textfont = dict(size=12, family='Arial Black')
+    fig.data[0].textfont = dict(size=10, family='Arial')
 
     # Build title
     if config.is_mixed():
@@ -231,8 +230,8 @@ def create_best_performer_heatmap_unified(
     """Unified best performer heatmap for all workload types.
 
     Shows rich cell annotations:
-    - Line 1: Winner name + time (e.g., "Mix3:234ms")
-    - Line 2: Runner-up name + time (e.g., "Sep3:267ms")
+    - Line 1: Winner name + time (e.g., "Mix3:234µs")
+    - Line 2: Runner-up name + time (e.g., "Sep3:267µs")
     - Line 3: Speedup margin (e.g., "1.14x")
 
     Color intensity varies based on margin of victory (speedup).
@@ -316,21 +315,21 @@ def create_best_performer_heatmap_unified(
                     z_matrix[i][j] = winner_idx + (intensity - 0.4) / 0.6
 
                     # Build text annotation
-                    winner_ms = winner_time * 1000
-                    runner_ms = runner_time * 1000
+                    winner_us = winner_time * 1000  # Convert ms to µs
+                    runner_us = runner_time * 1000  # Convert ms to µs
                     short_winner = shorten_approach_name(winner_name)
                     short_runner = shorten_approach_name(runner_name)
-                    text_matrix[i][j] = f"<b>{short_winner}:{winner_ms:.0f}</b><br>{short_runner}:{runner_ms:.0f}<br>{speedup:.2f}x"
+                    text_matrix[i][j] = f"{short_winner}:{winner_us:.0f}µs<br>{short_runner}:{runner_us:.0f}µs<br>{speedup:.2f}x"
 
                     # Create hover text
                     hover_lines = [
                         f"{config.y_axis_label}: {config.format_y_axis_value(y_val)}",
                         f"{config.x_axis_label}: {config.format_x_axis_value(x_val)}",
-                        f"<br><b>Winner: {shorten_approach_name(winner_name)} ({winner_time*1000:.2f}ms)</b><br>"
+                        f"<br><b>Winner: {shorten_approach_name(winner_name)} ({winner_time*1000:.2f}µs)</b><br>"
                     ]
                     for rank, (app, time) in enumerate(sorted_times, 1):
                         hover_lines.append(
-                            f"{rank}. {shorten_approach_name(app)}: {time*1000:.2f}ms"
+                            f"{rank}. {shorten_approach_name(app)}: {time*1000:.2f}µs"
                         )
                     grid.hover_text[i][j] = "<br>".join(hover_lines)
 
@@ -344,7 +343,7 @@ def create_best_performer_heatmap_unified(
 
                     winner_ms = winner_time * 1000
                     short_winner = shorten_approach_name(winner_name)
-                    text_matrix[i][j] = f"<b>{short_winner}:{winner_ms:.0f}</b>"
+                    text_matrix[i][j] = f"{short_winner}:{winner_ms:.0f}"
 
                     grid.hover_text[i][j] = f"{config.y_axis_label}: {config.format_y_axis_value(y_val)}<br>{config.x_axis_label}: {config.format_x_axis_value(x_val)}<br>{shorten_approach_name(winner_name)}: {winner_time*1000:.2f}ms"
 
@@ -364,7 +363,7 @@ def create_best_performer_heatmap_unified(
         showscale=False,  # Hide colorbar (colors represent categories)
         text=text_matrix,
         texttemplate="%{text}",
-        textfont=dict(size=12, color='white', family='Arial Black'),
+        textfont=dict(size=10, color='white', family='Arial'),
         hovertext=grid.hover_text,
         hoverinfo='text',
     ))
@@ -761,39 +760,52 @@ def create_line_graph(
     selected_approaches: List[str],
     selected_dimension_values: List[int],
     metric: str = "median",
-    y_scale: str = "log"
+    y_scale: str = "log",
+    x_axis: str = "kv_length"
 ) -> go.Figure:
-    """Create line graph showing latency vs KV cache length.
+    """Create line graph showing latency vs selected x-axis dimension.
 
     Args:
         df: DataFrame with benchmark results
         workload_type: 'decode' or 'prefill'
         selected_approaches: List of approaches to plot
-        selected_dimension_values: List of batch sizes (decode) or query lengths (prefill)
+        selected_dimension_values: List of dimension values for line separation (batch/query)
         metric: Metric to use ('median', 'mean', etc.')
         y_scale: Y-axis scale type ('log' or 'linear'), default 'log'
+        x_axis: Column to use as x-axis ('kv_length', 'batch_size', or 'query_length')
 
     Returns:
         Plotly Figure object with line graph
     """
-    # Apply approach grouping
-    df_filtered, grouped_approaches = apply_approach_grouping(df, workload_type, selected_approaches, metric)
+    # Note: DataFrame should already have grouped columns from caller
+    # No need to call apply_approach_grouping again
+    df_filtered = df.copy()
 
-    # Determine dimension column
+    # Determine dimension column (the non-x-axis variable that creates separate lines)
     if workload_type == "decode":
-        dimension_col = "batch_size"
-        dimension_label = "Batch"
+        if x_axis == "kv_length":
+            dimension_col = "batch_size"
+            dimension_label = "Batch"
+        else:  # x_axis == "batch_size"
+            dimension_col = "kv_length"
+            dimension_label = "KV"
     elif workload_type == "prefill":
-        dimension_col = "query_length"
-        dimension_label = "Query"
+        if x_axis == "kv_length":
+            dimension_col = "query_length"
+            dimension_label = "Query"
+        else:  # x_axis == "query_length"
+            dimension_col = "kv_length"
+            dimension_label = "KV"
     else:
         raise ValueError(f"Unsupported workload_type: {workload_type}")
 
     # Filter by selected dimension values
     df_plot = df_filtered[df_filtered[dimension_col].isin(selected_dimension_values)].copy()
 
-    # Skip KV lengths 32 and 64 for prefill (these are decode cache sizes)
-    if workload_type == "prefill":
+    # Skip KV lengths 32 and 64 for prefill when KV is on an axis (these are decode cache sizes)
+    if workload_type == "prefill" and x_axis == "kv_length":
+        df_plot = df_plot[~df_plot['kv_length'].isin([32, 64])].copy()
+    elif workload_type == "prefill" and dimension_col == "kv_length":
         df_plot = df_plot[~df_plot['kv_length'].isin([32, 64])].copy()
 
     if df_plot.empty:
@@ -801,14 +813,14 @@ def create_line_graph(
         fig.add_annotation(text="No data for selected filters", x=0.5, y=0.5, showarrow=False)
         return fig
 
-    # Get unique KV lengths (x-axis)
-    kv_lengths = sorted(df_plot['kv_length'].unique())
+    # Get unique x-axis values
+    x_values = sorted(df_plot[x_axis].unique())
 
     # Create figure
     fig = go.Figure()
 
     # Plot lines for each (approach, dimension_value) combination
-    for approach in grouped_approaches:
+    for approach in selected_approaches:
         col = f"{approach}_{metric}"
         if col not in df_plot.columns:
             continue
@@ -820,16 +832,16 @@ def create_line_graph(
             if subset.empty:
                 continue
 
-            # Collect (kv, latency) pairs
+            # Collect (x, latency) pairs
             x_vals = []
             y_vals = []
 
-            for kv in kv_lengths:
-                kv_subset = subset[subset['kv_length'] == kv]
-                if not kv_subset.empty and col in kv_subset.columns:
-                    latency = kv_subset[col].iloc[0]
+            for x_val in x_values:
+                x_subset = subset[subset[x_axis] == x_val]
+                if not x_subset.empty and col in x_subset.columns:
+                    latency = x_subset[col].iloc[0]
                     if pd.notna(latency):
-                        x_vals.append(kv)
+                        x_vals.append(x_val)
                         y_vals.append(latency * 1000)  # Convert to ms
 
             if not x_vals:
@@ -839,8 +851,18 @@ def create_line_graph(
             color = APPROACH_COLORS.get(approach, "#808080")
             line_name = f"{shorten_approach_name(approach)} ({dimension_label}={format_kv_length(dim_value)})"
 
-            # Prepare customdata for formatted KV lengths in hover
-            customdata = [format_kv_length(kv) for kv in x_vals]
+            # Prepare customdata for formatted x-axis values in hover
+            customdata = [format_kv_length(x_val) for x_val in x_vals]
+
+            # Determine x-axis label for hover
+            if x_axis == "kv_length":
+                x_label = "KV Length"
+            elif x_axis == "batch_size":
+                x_label = "Batch Size"
+            elif x_axis == "query_length":
+                x_label = "Query Length"
+            else:
+                x_label = x_axis.replace("_", " ").title()
 
             fig.add_trace(go.Scatter(
                 x=x_vals,  # Use numeric values for proper positioning
@@ -852,16 +874,26 @@ def create_line_graph(
                 customdata=customdata,
                 hovertemplate=(
                     f"<b>{line_name}</b><br>"
-                    "KV Length: %{customdata}<br>"  # Use formatted value from customdata
+                    f"{x_label}: %{{customdata}}<br>"  # Use formatted value from customdata
                     "Latency: %{y:.2f}ms<br>"
                     "<extra></extra>"
                 )
             ))
 
+    # Determine x-axis label for layout
+    if x_axis == "kv_length":
+        x_axis_title = "KV Cache Length"
+    elif x_axis == "batch_size":
+        x_axis_title = "Batch Size"
+    elif x_axis == "query_length":
+        x_axis_title = "Query Length"
+    else:
+        x_axis_title = x_axis.replace("_", " ").title()
+
     # Update layout
     fig.update_layout(
-        title=f"{workload_type.title()} Latency vs KV Cache Length",
-        xaxis_title="KV Cache Length",
+        title=f"{workload_type.title()} Latency vs {x_axis_title}",
+        xaxis_title=x_axis_title,
         yaxis_title="Latency (ms)",
         height=600,
         margin=dict(l=50, r=10, t=80, b=80),
@@ -883,8 +915,8 @@ def create_line_graph(
         gridwidth=1,
         gridcolor='lightgray',
         tickmode='array',
-        tickvals=kv_lengths,  # Position ticks at actual KV values
-        ticktext=[format_kv_length(kv) for kv in kv_lengths]  # Show formatted labels
+        tickvals=x_values,  # Position ticks at actual x values
+        ticktext=[format_kv_length(x_val) for x_val in x_values]  # Show formatted labels
     )
     # Format y-axis based on scale type
     if y_scale == "log":

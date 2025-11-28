@@ -10,6 +10,11 @@ import torch
 from dataclasses import dataclass
 from typing import List, Tuple
 
+# FlashInfer internal page limit (empirically discovered)
+# Scenarios exceeding this limit fail with "CUDA illegal memory access"
+# This is a 24-bit integer constraint (2^24 = 16,777,216 pages)
+FLASHINFER_MAX_PAGES = 16_777_216  # 2^24 pages
+
 
 @dataclass
 class MemoryEstimate:
@@ -20,13 +25,24 @@ class MemoryEstimate:
     workspace_gb: float
     total_gb: float
     available_gb: float
+    num_pages: int
+    exceeds_page_limit: bool
     fits: bool
 
     def __str__(self):
-        status = "FITS" if self.fits else "OOM"
-        return (f"{status}: needs {self.total_gb:.2f}GB "
-                f"(KV:{self.kv_cache_gb:.2f}, Q:{self.q_tensor_gb:.2f}, Out:{self.output_tensor_gb:.2f}, WS:{self.workspace_gb:.2f}), "
-                f"available {self.available_gb:.2f}GB")
+        if self.exceeds_page_limit:
+            status = "PAGE_LIMIT_EXCEEDED"
+            return (f"{status}: {self.num_pages:,} pages exceeds FlashInfer limit of {FLASHINFER_MAX_PAGES:,} pages (2^24)")
+        elif not self.fits:
+            status = "OOM"
+            return (f"{status}: needs {self.total_gb:.2f}GB "
+                    f"(KV:{self.kv_cache_gb:.2f}, Q:{self.q_tensor_gb:.2f}, Out:{self.output_tensor_gb:.2f}, WS:{self.workspace_gb:.2f}), "
+                    f"available {self.available_gb:.2f}GB")
+        else:
+            status = "FITS"
+            return (f"{status}: needs {self.total_gb:.2f}GB, {self.num_pages:,} pages "
+                    f"(KV:{self.kv_cache_gb:.2f}, Q:{self.q_tensor_gb:.2f}, Out:{self.output_tensor_gb:.2f}, WS:{self.workspace_gb:.2f}), "
+                    f"available {self.available_gb:.2f}GB")
 
 
 def estimate_scenario_memory(
@@ -72,6 +88,10 @@ def estimate_scenario_memory(
     # Calculate number of pages needed
     num_pages = sum((kv + page_size - 1) // page_size for kv in kv_lengths)
 
+    # Check FlashInfer page limit (2^24 = 16,777,216 pages)
+    # Empirically discovered: scenarios exceeding this fail with CUDA illegal memory access
+    exceeds_page_limit = num_pages > FLASHINFER_MAX_PAGES
+
     # KV cache memory: num_pages * 2 (K and V) * page_size * num_kv_heads * head_dim * dtype
     kv_cache_bytes = num_pages * 2 * page_size * num_kv_heads * head_dim * dtype_bytes
 
@@ -89,6 +109,10 @@ def estimate_scenario_memory(
     props = torch.cuda.get_device_properties(device)
     available_bytes = props.total_memory * utilization
 
+    # Scenario fits if it passes BOTH memory check AND page limit check
+    memory_fits = total_bytes < available_bytes
+    fits = memory_fits and not exceeds_page_limit
+
     return MemoryEstimate(
         kv_cache_gb=kv_cache_bytes / 1e9,
         q_tensor_gb=q_tensor_bytes / 1e9,
@@ -96,7 +120,9 @@ def estimate_scenario_memory(
         workspace_gb=workspace_size / 1e9,
         total_gb=total_bytes / 1e9,
         available_gb=available_bytes / 1e9,
-        fits=total_bytes < available_bytes
+        num_pages=num_pages,
+        exceeds_page_limit=exceeds_page_limit,
+        fits=fits
     )
 
 

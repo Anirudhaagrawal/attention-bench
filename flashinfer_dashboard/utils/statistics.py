@@ -8,7 +8,6 @@ def calculate_winner_statistics(
     df: pd.DataFrame,
     approaches: List[str],
     metric: str = "median",
-    tie_threshold: float = 0.01,
     aggregate_by: List[str] = None
 ) -> Dict[str, Any]:
     """Calculate winner statistics for comparing approaches.
@@ -17,7 +16,6 @@ def calculate_winner_statistics(
         df: DataFrame with benchmark results (already filtered and grouped)
         approaches: List of approach names to compare
         metric: Metric to use for comparison ("median", "mean", etc.)
-        tie_threshold: Relative difference threshold for ties (default: 1%)
         aggregate_by: Optional list of columns to group by before counting wins.
                      Used to aggregate across multiple runs for the same scenario.
                      Takes minimum time across runs for each approach.
@@ -26,11 +24,11 @@ def calculate_winner_statistics(
         Dictionary with winner statistics:
         {
             "wins": {approach: win_count, ...},
-            "ties": tie_count,
             "total_scenarios": total_count,
-            "win_percentages": {approach: percentage, ...},
-            "tie_percentage": percentage
+            "win_percentages": {approach: percentage, ...}
         }
+
+        Note: Winner determination is binary - the approach with lowest time always wins.
     """
     # If aggregate_by is specified, aggregate across runs first
     if aggregate_by is not None and len(aggregate_by) > 0:
@@ -50,7 +48,6 @@ def calculate_winner_statistics(
 
     # Initialize win counters
     wins = {approach: 0 for approach in approaches}
-    ties = 0
     total_scenarios = 0
 
     # Count wins per scenario
@@ -66,18 +63,9 @@ def calculate_winner_statistics(
         if len(times) >= 2:
             total_scenarios += 1
 
-            # Check for ties (all times within threshold of minimum)
-            time_values = list(times.values())
-            min_time = min(time_values)
-            max_time = max(time_values)
-
-            if abs(max_time - min_time) / min_time < tie_threshold:
-                # All approaches within tie threshold
-                ties += 1
-            else:
-                # Find winner (lowest time)
-                winner = min(times.items(), key=lambda x: x[1])[0]
-                wins[winner] += 1
+            # Find winner (lowest time) - binary, no ties
+            winner = min(times.items(), key=lambda x: x[1])[0]
+            wins[winner] += 1
 
     # Calculate percentages
     win_percentages = {}
@@ -87,14 +75,10 @@ def calculate_winner_statistics(
         else:
             win_percentages[approach] = 0.0
 
-    tie_percentage = 100 * ties / total_scenarios if total_scenarios > 0 else 0.0
-
     return {
         "wins": wins,
-        "ties": ties,
         "total_scenarios": total_scenarios,
-        "win_percentages": win_percentages,
-        "tie_percentage": tie_percentage
+        "win_percentages": win_percentages
     }
 
 

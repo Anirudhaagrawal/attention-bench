@@ -1,21 +1,12 @@
-import json
-import os
-import uuid
-
 import numpy as np
 import torch
 
 
 class RecordFunctionTracer:
-    """Accurate timing using torch.profiler with CUDA correlation.
+    """Accurate timing using torch.profiler with in-memory events API.
 
     This tracer uses torch.profiler to capture CPU and CUDA events, then
-    correlates them to get accurate CUDA kernel execution times. This is
-    more accurate than simple CUDA events because it properly accounts for
-    kernel launch overhead and async execution.
-
-    Profiler traces are written to a temporary file and automatically deleted
-    after statistics are extracted.
+    accesses them via the in-memory events() API.
 
     Usage:
         tracer = RecordFunctionTracer()
@@ -30,10 +21,7 @@ class RecordFunctionTracer:
 
     def __init__(self):
         """Initialize tracer."""
-        # Use temporary file that we'll delete after reading
-        import tempfile
-        self.temp_trace = tempfile.NamedTemporaryFile(mode='w+', suffix='.json', delete=False)
-        self.trace_path = self.temp_trace.name
+        pass
 
     def __enter__(self):
         self.profiler = torch.profiler.profile(
@@ -45,45 +33,10 @@ class RecordFunctionTracer:
         self.profiler.__enter__()
         return self
 
-    def __exit__(self, *args):
-        self.profiler.__exit__(None, None, None)
+    def __exit__(self, exc_type, exc_val, exc_tb):
         torch.cuda.synchronize()
-        self.profiler.export_chrome_trace(self.trace_path)
+        self.profiler.__exit__(exc_type, exc_val, exc_tb)
 
-    def find_children(self, trace, event):
-        """Find all events that are children of the given event."""
-        if not ("dur" in event and "ts" in event):
-            return []
-
-        children = []
-        for e in trace:
-            if not ("dur" in e and "ts" in e):
-                continue
-
-            # if the ts of the child is completely within the ts of the parent
-            if (
-                e["ts"] > event["ts"]
-                and e["ts"] + e["dur"] < event["ts"] + event["dur"]
-            ):
-                children.append(e)
-        return children
-
-    def find_correlated_event(self, trace, event):
-        """Find the CUDA event correlated with a CPU event."""
-        if not ("args" in event and "correlation" in event["args"]):
-            return None
-
-        for e in trace:
-            if not ("args" in e and "correlation" in e["args"]):
-                continue
-
-            if e == event:
-                continue
-
-            if e["args"]["correlation"] == event["args"]["correlation"]:
-                return e
-
-        return None
 
     def get_operation_time_stats(self):
         """Get timing statistics for all recorded operations.
@@ -92,52 +45,65 @@ class RecordFunctionTracer:
             dict: Mapping from operation name to statistics dict with keys:
                   min, max, mean, median, std (all in milliseconds)
         """
+        torch.cuda.synchronize()  # Ensure profiler finished aggregating
+        events = self.profiler.events()
         stats = {}
 
-        try:
-            trace = json.load(open(self.trace_path, "r"))["traceEvents"]
+        # Diagnostic: Count events by type
+        user_annotation_count = 0
+        cuda_event_count = 0
+        cpu_event_count = 0
 
-            for event in trace:
-                # Look for user annotations (from record_function)
-                if not ("cat" in event and event["cat"] == "user_annotation"):
-                    continue
+        for event in events:
+            if not event.is_user_annotation:
+                continue
 
-                # Find all CUDA runtime calls within this annotation
-                children = self.find_children(trace, event)
-                cuda_time = 0
-                for child in children:
-                    if not ("cat" in child and child["cat"] == "cuda_runtime"):
-                        continue
-                    # Find the correlated CUDA kernel execution
-                    correlated_event = self.find_correlated_event(trace, child)
-                    if not correlated_event:
-                        continue
-                    cuda_time += correlated_event["dur"]
+            user_annotation_count += 1
 
-                if cuda_time == 0:
-                    continue
+            if event.device_type == torch.profiler.DeviceType.CUDA:
+                cuda_event_count += 1
+            elif event.device_type == torch.profiler.DeviceType.CPU:
+                cpu_event_count += 1
 
-                name = event["name"]
+            # Use CUDA events for direct kernel timing
+            if event.device_type != torch.profiler.DeviceType.CUDA:
+                continue
 
-                if name not in stats:
-                    stats[name] = []
+            name = event.name
+            device_time_us = event.device_time_total
 
-                stats[name].append(cuda_time * 1e-3)  # convert to ms
+            if device_time_us == 0:
+                # Diagnostic logging when we encounter zero device time
+                print(f"⚠️  Zero device_time for CUDA event: {name}")
+                print(f"   device_type: {event.device_type}")
+                print(f"   cpu_time_total: {event.cpu_time_total} µs")
+                continue
 
-            # Compute statistics for each operation
-            result = {
-                operation: {
-                    "min": float(np.min(times)),
-                    "max": float(np.max(times)),
-                    "mean": float(np.mean(times)),
-                    "median": float(np.median(times)),
-                    "std": float(np.std(times)),
-                }
-                for operation, times in stats.items()
+            if name not in stats:
+                stats[name] = []
+
+            stats[name].append(device_time_us / 1000.0)  # Convert to ms
+
+        # If we got no stats, log diagnostic info
+        if not stats:
+            print(f"⚠️  NO TIMING DATA CAPTURED")
+            print(f"   Total user annotations: {user_annotation_count}")
+            print(f"   CUDA events: {cuda_event_count}")
+            print(f"   CPU events: {cpu_event_count}")
+
+            # Show all user annotation events for debugging
+            print(f"   All user annotation events:")
+            for event in events:
+                if event.is_user_annotation:
+                    print(f"     - {event.name}: device_type={event.device_type}, device_time={event.device_time_total}µs")
+
+        return {
+            operation: {
+                "min": float(np.min(times)),
+                "max": float(np.max(times)),
+                "mean": float(np.mean(times)),
+                "median": float(np.median(times)),
+                "std": float(np.std(times)),
             }
-        finally:
-            # Clean up temporary trace file
-            if os.path.exists(self.trace_path):
-                os.unlink(self.trace_path)
-
-        return result
+            for operation, times in stats.items()
+        }

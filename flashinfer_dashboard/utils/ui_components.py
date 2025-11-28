@@ -161,11 +161,10 @@ def render_winner_metrics(
         st.subheader("Winner Statistics")
 
     wins = win_stats["wins"]
-    ties = win_stats["ties"]
     total = win_stats["total_scenarios"]
 
     # Display win counts in columns
-    num_cols = len(approaches) + 1  # +1 for ties column
+    num_cols = len(approaches)
     cols = st.columns(num_cols)
 
     # Display each approach's win count
@@ -173,20 +172,11 @@ def render_winner_metrics(
         with cols[i]:
             win_count = wins.get(approach, 0)
             percentage = 100 * win_count / total if total > 0 else 0.0
-            st.metric(
-                shorten_approach_name(approach),
-                f"{win_count} wins",
-                f"{percentage:.1f}%"
-            )
 
-    # Display ties
-    with cols[-1]:
-        tie_percentage = 100 * ties / total if total > 0 else 0.0
-        st.metric(
-            "Ties",
-            f"{ties}",
-            f"{tie_percentage:.1f}%"
-        )
+            # Display using markdown components (no arrow issues)
+            st.markdown(f"**{shorten_approach_name(approach)}**")
+            st.markdown(f"### {win_count} wins")
+            st.caption(f"{percentage:.1f}%")
 
 
 def render_heatmap_with_stats(

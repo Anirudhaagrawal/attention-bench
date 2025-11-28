@@ -1,0 +1,142 @@
+# Test configuration for scenarios that produce null timing results
+# Purpose: Replicate null timing issues found in production benchmark run
+# Source: results/h200/run_2025-11-26_15-59-00/config_mixed_multi_model_tp_70b_llama70b_tp1.jsonl
+
+profiling:
+  num_warmup_iters: 5
+  num_active_iters: 10
+
+memory:
+  enable_memory_check: true
+  memory_utilization: 0.8
+  memory_overhead: 1.4
+
+output:
+  results_dir: "results/null_tests"
+  plots_dir: "plots/null_tests"
+
+approaches:
+  - flashinfer_batch_attention
+  - flashinfer_mixed_fa2
+  - flashinfer_mixed_fa3
+  - flashinfer_separated_fa2
+  - flashinfer_separated_fa3
+  - official_fa3
+
+models:
+  llama_70b:
+    name: "llama70b"
+    num_qo_heads: 64
+    num_kv_heads: 8
+    head_dim: 128
+    page_size: 16
+    workspace_size: 536870912
+
+tp_degrees: [1]
+
+# Manually define variants and scenarios for the 6 failing scenarios
+# Format matches what config_generator.py produces
+
+variants:
+  # Decode variants
+  decode_q1_kv8k:
+    q_tokens: 1
+    kv_tokens: 8192
+    description: "Decode (1 q, 8k kv)"
+  decode_q1_kv128k:
+    q_tokens: 1
+    kv_tokens: 131072
+    description: "Decode (1 q, 128k kv)"
+  decode_q1_kv1k:
+    q_tokens: 1
+    kv_tokens: 1024
+    description: "Decode (1 q, 1k kv)"
+  decode_q1_kv64k:
+    q_tokens: 1
+    kv_tokens: 65536
+    description: "Decode (1 q, 64k kv)"
+  decode_q1_kv1m:
+    q_tokens: 1
+    kv_tokens: 1048576
+    description: "Decode (1 q, 1m kv)"
+
+  # Prefill variants
+  prefill_q128_kv128:
+    q_tokens: 128
+    kv_tokens: 128
+    description: "Prefill (128 q, 128 kv)"
+  prefill_q512_kv1m:
+    q_tokens: 512
+    kv_tokens: 1048576
+    description: "Prefill (512 q, 1m kv)"
+  prefill_q128_kv1k:
+    q_tokens: 128
+    kv_tokens: 1024
+    description: "Prefill (128 q, 1k kv)"
+  prefill_q16k_kv4k:
+    q_tokens: 16384
+    kv_tokens: 4096
+    description: "Prefill (16k q, 4k kv)"
+  prefill_q4k_kv2k:
+    q_tokens: 4096
+    kv_tokens: 2048
+    description: "Prefill (4k q, 2k kv)"
+  prefill_q512_kv128k:
+    q_tokens: 512
+    kv_tokens: 131072
+    description: "Prefill (512 q, 128k kv)"
+
+scenarios:
+  # Scenario 1: Small decode + tiny prefill
+  # Expected nulls: flashinfer_batch_attention
+  null_test_1_dec_b1_kv8k_pref_q128_kv128:
+    name: "Mixed: 1D(8k) + 1P(128q,128kv)"
+    description: "1 decode (8k KV) + 1 prefill (128 Q, 128 KV)"
+    variants_to_run:
+      - decode_q1_kv8k: 1
+      - prefill_q128_kv128: 1
+
+  # Scenario 2: Small decode + huge prefill
+  # Expected nulls: flashinfer_batch_attention, flashinfer_mixed_fa2
+  null_test_2_dec_b1_kv8k_pref_q512_kv1m:
+    name: "Mixed: 1D(8k) + 1P(512q,1m kv)"
+    description: "1 decode (8k KV) + 1 prefill (512 Q, 1m KV)"
+    variants_to_run:
+      - decode_q1_kv8k: 1
+      - prefill_q512_kv1m: 1
+
+  # Scenario 3: Large decode + small prefill
+  # Expected nulls: flashinfer_batch_attention, flashinfer_mixed_fa2, flashinfer_mixed_fa3, official_fa3
+  null_test_3_dec_b1_kv128k_pref_q128_kv1k:
+    name: "Mixed: 1D(128k) + 1P(128q,1k kv)"
+    description: "1 decode (128k KV) + 1 prefill (128 Q, 1k KV)"
+    variants_to_run:
+      - decode_q1_kv128k: 1
+      - prefill_q128_kv1k: 1
+
+  # Scenario 4: Multi-decode + large prefill query
+  # Expected nulls: flashinfer_batch_attention, flashinfer_mixed_fa2
+  null_test_4_dec_b2_kv1k_pref_q16k_kv4k:
+    name: "Mixed: 2D(1k) + 1P(16kq,4k kv)"
+    description: "2 decodes (1k KV) + 1 prefill (16k Q, 4k KV)"
+    variants_to_run:
+      - decode_q1_kv1k: 2
+      - prefill_q16k_kv4k: 1
+
+  # Scenario 5: Multi-decode + large decode KV
+  # Expected nulls: flashinfer_batch_attention, flashinfer_mixed_fa3
+  null_test_5_dec_b2_kv64k_pref_q4k_kv2k:
+    name: "Mixed: 2D(64k) + 1P(4kq,2k kv)"
+    description: "2 decodes (64k KV) + 1 prefill (4k Q, 2k KV)"
+    variants_to_run:
+      - decode_q1_kv64k: 2
+      - prefill_q4k_kv2k: 1
+
+  # Scenario 6: Extreme - huge decode + large prefill
+  # Expected nulls: flashinfer_batch_attention, flashinfer_mixed_fa2, flashinfer_mixed_fa3, official_fa3
+  null_test_6_dec_b2_kv1m_pref_q512_kv128k:
+    name: "Mixed: 2D(1m) + 1P(512q,128k kv)"
+    description: "2 decodes (1m KV) + 1 prefill (512 Q, 128k KV)"
+    variants_to_run:
+      - decode_q1_kv1m: 2
+      - prefill_q512_kv128k: 1

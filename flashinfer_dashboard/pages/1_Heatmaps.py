@@ -208,14 +208,3 @@ for workload_type in workload_types:
 
 # Export options
 export_sidebar(filtered_df, filters.get('approaches', approaches), filters)
-
-# Tips
-st.divider()
-with st.expander("💡 Tips"):
-    st.markdown("""
-    - **Zoom**: Use mouse scroll or pinch to zoom into specific regions
-    - **Pan**: Click and drag to pan around the heatmap
-    - **Hover**: Hover over cells to see detailed timing information
-    - **Export**: Click the camera icon in the chart toolbar to save as PNG
-    - **Filters**: Use the sidebar to narrow down results by model, TP degree, or workload type
-    """)

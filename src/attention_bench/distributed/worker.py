@@ -12,12 +12,13 @@ import os
 from typing import Dict, List, Optional, Any
 
 
-@ray.remote(num_cpus=1, num_gpus=1)
+@ray.remote(num_cpus=16, num_gpus=1)
 class BenchmarkWorker:
     """Ray actor that runs benchmarks on a single GPU.
 
     Key patterns from Vidur:
     - num_gpus=1 ensures exclusive GPU access
+    - num_cpus=16 allocates proportional CPU cores (128 cores / 8 GPUs)
     - Configuration passed as primitives, tensors created inside
     - Explicit cleanup after each scenario
     """
@@ -30,6 +31,12 @@ class BenchmarkWorker:
             use_cuda_graphs: Whether to use CUDA graphs
             enable_profiling: Whether to enable profiling
         """
+        # Optimization: Set CPU thread limits to prevent oversubscription
+        # With 128 cores and 8 GPUs, allocate 16 cores per worker
+        os.environ['OMP_NUM_THREADS'] = '16'
+        os.environ['MKL_NUM_THREADS'] = '16'
+        torch.set_num_threads(16)
+
         # Import here to ensure clean CUDA context in worker
         from attention_bench.cli.run_benchmark import load_config, ToleranceBenchmarkRunner
 

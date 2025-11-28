@@ -16,6 +16,7 @@ from attention_bench.plotting.utils import (
     parse_prefill_scenario,
     parse_mixed_scenario,
 )
+from attention_bench.plotting.workload_categorizer import categorize_workload, categorize_mixed_workload
 
 
 @st.cache_data
@@ -55,23 +56,29 @@ def load_all_results(results_dir: str = "results") -> pd.DataFrame:
 
     # Iterate through all run directories
     for run_dir, hardware_type in run_dirs:
-        # Load all JSON files in this run (exclude profiler traces and test files)
-        for json_file in sorted(run_dir.glob("*.json")):
+        # Load all JSON and JSONL files in this run (exclude profiler traces and test files)
+        result_files = sorted(list(run_dir.glob("*.json")) + list(run_dir.glob("*.jsonl")))
+        for result_file in result_files:
             # Skip profiler trace files and test files
-            if "profiler_trace" in json_file.name or "config_test" in json_file.name:
+            if "profiler_trace" in result_file.name or "config_test" in result_file.name:
                 continue
             try:
-                with open(json_file) as f:
-                    data = json.load(f)
-
-                # Check if this is the new format with metadata
-                if isinstance(data, dict) and "metadata" in data and "results" in data:
-                    metadata = data["metadata"]
-                    scenarios = data["results"]
-                else:
-                    # Old format: no metadata
-                    metadata = {}
-                    scenarios = data if isinstance(data, list) else []
+                with open(result_file) as f:
+                    if result_file.suffix == '.jsonl':
+                        # JSONL format: one scenario per line
+                        scenarios = [json.loads(line) for line in f if line.strip()]
+                        metadata = {}  # JSONL doesn't have metadata wrapper
+                    else:
+                        # JSON format
+                        data = json.load(f)
+                        # Check if this is the new format with metadata
+                        if isinstance(data, dict) and "metadata" in data and "results" in data:
+                            metadata = data["metadata"]
+                            scenarios = data["results"]
+                        else:
+                            # Old format: no metadata
+                            metadata = {}
+                            scenarios = data if isinstance(data, list) else []
 
                 # Extract metadata
                 model_name = metadata.get("model_name", "unknown")
@@ -80,8 +87,8 @@ def load_all_results(results_dir: str = "results") -> pd.DataFrame:
                 config_name = metadata.get("config_name", "")
 
                 # Fallback: parse model and TP from filename if not in metadata
-                # e.g., "config_prefill_multi_model_tp_llama8b_tp4.json"
-                filename = json_file.stem
+                # e.g., "config_prefill_multi_model_tp_llama8b_tp4.json" or ".jsonl"
+                filename = result_file.stem
                 if model_name == "unknown":
                     import re
                     model_match = re.search(r'(llama\d+b)', filename, re.IGNORECASE)
@@ -90,12 +97,12 @@ def load_all_results(results_dir: str = "results") -> pd.DataFrame:
 
                 if tp_degree == 1 and "_tp" in filename:
                     import re
-                    tp_match = re.search(r'_tp(\d+)(?:\.json)?$', filename)
+                    tp_match = re.search(r'_tp(\d+)', filename)
                     if tp_match:
                         tp_degree = int(tp_match.group(1))
 
                 # Determine workload type from filename or config
-                filename = json_file.stem
+                filename = result_file.stem
                 if "decode" in filename.lower():
                     workload_type = "decode"
                 elif "prefill" in filename.lower():
@@ -163,6 +170,19 @@ def load_all_results(results_dir: str = "results") -> pd.DataFrame:
                         "used_cuda_graphs": scenario.get("used_cuda_graphs", False),
                     }
 
+                    # Add workload category
+                    if workload_type == "decode":
+                        categories = categorize_workload(batch_size, 1, kv_length, "decode")
+                    elif workload_type == "prefill":
+                        categories = categorize_workload(batch_size, query_length, kv_length, "prefill")
+                    elif workload_type == "mixed":
+                        # For mixed workloads, check all 4 dimensions separately
+                        categories = categorize_mixed_workload(decode_batch, decode_kv, prefill_query, prefill_kv)
+                    else:
+                        categories = []
+
+                    row["workload_category"] = ','.join(categories) if categories else ''
+
                     # Add approach times (mean values)
                     for approach, time in approach_times.items():
                         row[f"{approach}_mean"] = time
@@ -178,13 +198,17 @@ def load_all_results(results_dir: str = "results") -> pd.DataFrame:
                     results.append(row)
 
             except Exception as e:
-                st.warning(f"Error loading {json_file}: {e}")
+                st.warning(f"Error loading {result_file}: {e}")
                 continue
 
     if not results:
         return pd.DataFrame()
 
     df = pd.DataFrame(results)
+
+    # Filter out default model runs (case-insensitive)
+    if 'model' in df.columns:
+        df = df[df['model'].str.lower() != 'default']
 
     # Convert timestamp to datetime if possible
     if "timestamp" in df.columns and not df["timestamp"].empty:
@@ -351,13 +375,14 @@ def apply_filters(df: pd.DataFrame, filters: Dict[str, Any]) -> pd.DataFrame:
     """
     filtered = df.copy()
 
-    # Run filter
-    if filters.get("runs"):
-        filtered = filtered[filtered["run_id"].isin(filters["runs"])]
-
     # Workload type filter
     if filters.get("workload"):
         filtered = filtered[filtered["workload_type"] == filters["workload"]]
+
+    # Workload category filter
+    if filters.get("workload_category"):
+        category = filters["workload_category"]
+        filtered = filtered[filtered["workload_category"].str.contains(category, na=False)]
 
     # Model filter
     if filters.get("models"):
@@ -371,25 +396,48 @@ def apply_filters(df: pd.DataFrame, filters: Dict[str, Any]) -> pd.DataFrame:
     if filters.get("hardware_types") and "hardware_type" in filtered.columns:
         filtered = filtered[filtered["hardware_type"].isin(filters["hardware_types"])]
 
+    # Determine column names based on workload type
+    workload_type = filters.get("workload", "mixed")
+    if workload_type == "mixed":
+        batch_col = "decode_batch"
+        query_col = "prefill_query"
+        kv_col = "decode_kv"
+    else:
+        batch_col = "batch_size"
+        query_col = "query_length"
+        kv_col = "kv_length"
+
     # Batch size range
-    if filters.get("batch_range"):
+    if filters.get("batch_range") and batch_col in filtered.columns:
         min_batch, max_batch = filters["batch_range"]
         filtered = filtered[
-            (filtered["batch_size"] >= min_batch) &
-            (filtered["batch_size"] <= max_batch)
+            (filtered[batch_col] >= min_batch) &
+            (filtered[batch_col] <= max_batch)
+        ]
+
+    # Query length range
+    if filters.get("query_range") and query_col in filtered.columns:
+        min_query, max_query = filters["query_range"]
+        filtered = filtered[
+            (filtered[query_col] >= min_query) &
+            (filtered[query_col] <= max_query)
         ]
 
     # KV length range
-    if filters.get("kv_range"):
+    if filters.get("kv_range") and kv_col in filtered.columns:
         min_kv, max_kv = filters["kv_range"]
         filtered = filtered[
-            (filtered["kv_length"] >= min_kv) &
-            (filtered["kv_length"] <= max_kv)
+            (filtered[kv_col] >= min_kv) &
+            (filtered[kv_col] <= max_kv)
         ]
 
-    # CUDA graphs only
-    if filters.get("cuda_graphs_only"):
-        filtered = filtered[filtered["used_cuda_graphs"] == True]
+    # Prefill KV range (mixed workloads only)
+    if filters.get("prefill_kv_range") and "prefill_kv" in filtered.columns:
+        min_pfkv, max_pfkv = filters["prefill_kv_range"]
+        filtered = filtered[
+            (filtered["prefill_kv"] >= min_pfkv) &
+            (filtered["prefill_kv"] <= max_pfkv)
+        ]
 
     # Apply deduplication (always on by default)
     # Picks the run with most successful approaches for each unique scenario
